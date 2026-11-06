@@ -9,7 +9,7 @@ import styles from './index.module.less'
 
 const { Sider, Content } = Layout
 
-export default function AppLayout({ children }) {
+const AppLayout = ({ children }) => {
   const { user } = useAuthContext()
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [collapsed, setCollapsed] = useState(false)
@@ -18,7 +18,7 @@ export default function AppLayout({ children }) {
 
   const isCollapsed = !isMobile && collapsed
 
-  function renderSidebar() {
+  const renderSidebar = () => {
     return (
       <div className={styles.siderInner}>
         <div className={styles.siderTop}>
@@ -54,8 +54,9 @@ export default function AppLayout({ children }) {
         </div>
 
         <div className={styles.siderBottom}>
-          <button
-            type="button"
+          <Button
+            type="text"
+            block
             className={styles.mine}
             onClick={() => {
               setUserOpen(true)
@@ -66,7 +67,7 @@ export default function AppLayout({ children }) {
               {String(user.name || 'U').slice(0, 1).toUpperCase()}
             </Avatar>
             {!isCollapsed && <span className={styles.mineName}>{user.name}</span>}
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -115,3 +116,5 @@ export default function AppLayout({ children }) {
     </Layout>
   )
 }
+
+export default AppLayout

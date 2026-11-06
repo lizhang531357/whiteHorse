@@ -3,12 +3,12 @@ import { useAuth } from '../hooks/useAuth'
 
 const AuthContext = createContext(null)
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const auth = useAuth()
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>
 }
 
-export function useAuthContext() {
+export const useAuthContext = () => {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuthContext 必须在 AuthProvider 内使用')
   return ctx

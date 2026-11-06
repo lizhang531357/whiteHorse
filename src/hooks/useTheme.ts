@@ -5,7 +5,7 @@ import { loadString, saveString } from '../utils/storage'
 const THEME_KEY = 'baima:theme'
 const DARK_LINK_ID = 'baima-antd-dark'
 
-function applyAntdDark(enabled) {
+const applyAntdDark = (enabled) => {
   const existing = document.getElementById(DARK_LINK_ID)
   if (enabled && !existing) {
     const link = document.createElement('link')
@@ -18,7 +18,7 @@ function applyAntdDark(enabled) {
   }
 }
 
-export function useTheme() {
+export const useTheme = () => {
   const [theme, setTheme] = useState(() => (loadString(THEME_KEY, 'light') === 'dark' ? 'dark' : 'light'))
 
   useEffect(() => {

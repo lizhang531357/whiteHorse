@@ -8,23 +8,52 @@ import { filesToPayload } from '../utils/file'
 import { uid } from '../utils/id'
 import { consumeSSE, requestChat } from '../utils/stream'
 import { loadJSON, saveJSON } from '../utils/storage'
+import { api } from '../utils/api'
 
 const ChatContext = createContext(null)
 
 const HISTORY_LIMIT = 30
+const HISTORY_IMAGE_LIMIT = 6
 
-function toHistory(messages = []) {
-  return messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .filter((m) => m.role === 'assistant' ? Boolean(m.content) : Boolean(m.content || m.promptContent))
-    .slice(-HISTORY_LIMIT)
-    .map((m) => ({
-      role: m.role,
-      content: m.role === 'user' ? m.promptContent || m.content : m.content,
-    }))
+const toHistory = (messages = []) => {
+  const usable = messages.filter((m) => {
+    if (m.role !== 'user' && m.role !== 'assistant') return false
+    if (m.role === 'assistant') return Boolean(m.content)
+    return Boolean(m.content || m.promptContent || (m.files || []).some((f) => f.preview))
+  })
+
+  const source = usable.slice(-HISTORY_LIMIT)
+  const result = new Array(source.length)
+  let imageBudget = HISTORY_IMAGE_LIMIT
+
+  for (let i = source.length - 1; i >= 0; i -= 1) {
+    const m = source[i]
+    if (m.role === 'assistant') {
+      result[i] = { role: 'assistant', content: m.content }
+      continue
+    }
+
+    const text = m.promptContent || m.content || ''
+    const images = []
+    if (imageBudget > 0) {
+      for (const file of m.files || []) {
+        if (imageBudget <= 0) break
+        if (typeof file.preview === 'string' && file.preview.startsWith('data:image/')) {
+          images.push({ type: 'image_url', image_url: { url: file.preview } })
+          imageBudget -= 1
+        }
+      }
+    }
+
+    result[i] = images.length
+      ? { role: 'user', content: [{ type: 'text', text: text || '（图片）' }, ...images] }
+      : { role: 'user', content: text }
+  }
+
+  return result.filter(Boolean)
 }
 
-export function ChatProvider({ children }) {
+export const ChatProvider = ({ children }) => {
   const { user } = useAuthContext()
   const {
     settings,
@@ -50,6 +79,7 @@ export function ChatProvider({ children }) {
     truncateFrom,
     truncateAfter,
     touchConversation,
+    updateMessageFiles,
   } = store
 
   const [loading, setLoading] = useState(false)
@@ -115,6 +145,43 @@ export function ChatProvider({ children }) {
   useEffect(() => {
     return () => abortRef.current?.abort()
   }, [])
+
+  const maybeAutoTitle = useCallback(
+    (convId, answer) => {
+      const conv = conversationsRef.current.find((c) => c.id === convId)
+      if (!conv) return
+
+      const userMessages = conv.messages.filter((m) => m.role === 'user')
+      if (userMessages.length !== 1) return
+
+      const firstUser = userMessages[0]
+      const fallbackTitle = deriveTitle(firstUser.content || '', firstUser.files || [])
+      if (conv.title !== fallbackTitle) return
+
+      const text = [
+        firstUser.content || '',
+        (firstUser.files || []).map((f) => f.name).join(' '),
+        answer || '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 2000)
+
+      if (!text.trim()) return
+
+      api
+        .generateTitle(text)
+        .then((data) => {
+          const nextTitle = String(data?.title || '').trim()
+          if (!nextTitle) return
+          const latest = conversationsRef.current.find((c) => c.id === convId)
+          if (!latest || latest.title !== fallbackTitle) return
+          renameConversation(convId, nextTitle)
+        })
+        .catch(() => {})
+    },
+    [conversationsRef, renameConversation],
+  )
 
   const startAssistant = useCallback(
     async ({ convId, history, message, attachments = [], userMsgId }) => {
@@ -183,6 +250,24 @@ export function ChatProvider({ children }) {
             content += delta
             scheduleFlush()
           },
+          onFiles: (saved) => {
+            if (!userMsgId || !Array.isArray(saved)) return
+            updateMessageFiles(convId, userMsgId, (files) =>
+              files.map((file, index) => {
+                const info = saved[index]
+                if (!info || !info.id) return file
+                return {
+                  ...file,
+                  id: info.id,
+                  size: info.size ?? file.size,
+                  type: info.type || file.type,
+                }
+              }),
+            )
+          },
+          onUsage: (value) => {
+            flush({ usage: value })
+          },
           onError: (msg) => {
             streamError = msg
           },
@@ -244,9 +329,21 @@ export function ChatProvider({ children }) {
         if (abortRef.current === controller) abortRef.current = null
         setBusy(false)
         touchConversation(convId)
+        if (content && !streamError && !controller.signal.aborted) {
+          maybeAutoTitle(convId, content)
+        }
       }
     },
-    [appendMessages, deleteMessage, patchMessage, setBusy, settings, touchConversation],
+    [
+      appendMessages,
+      deleteMessage,
+      maybeAutoTitle,
+      patchMessage,
+      setBusy,
+      settings,
+      touchConversation,
+      updateMessageFiles,
+    ],
   )
 
   const sendMessage = useCallback(
@@ -406,7 +503,7 @@ export function ChatProvider({ children }) {
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
 }
 
-export function useChatContext() {
+export const useChatContext = () => {
   const ctx = useContext(ChatContext)
   if (!ctx) throw new Error('useChatContext 必须在 ChatProvider 内使用')
   return ctx

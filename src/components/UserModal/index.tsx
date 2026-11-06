@@ -21,11 +21,11 @@ import { useAuthContext } from '../../context/AuthContext'
 import { useChatContext } from '../../context/ChatContext'
 import styles from './index.module.less'
 
-function initial(name) {
+const initial = (name) => {
   return String(name || 'U').trim().slice(0, 1).toUpperCase()
 }
 
-export default function UserModal({ open, onClose }) {
+const UserModal = ({ open, onClose }) => {
   const { user, updateProfile, logout } = useAuthContext()
   const {
     settings,
@@ -84,7 +84,7 @@ export default function UserModal({ open, onClose }) {
     }
   }, [open])
 
-  async function saveProfile() {
+  const saveProfile = async () => {
     if (!profile.name.trim()) {
       message.warning('昵称不能为空')
       return
@@ -101,7 +101,7 @@ export default function UserModal({ open, onClose }) {
     }
   }
 
-  async function saveConfig() {
+  const saveConfig = async () => {
     setSavingConfig(true)
     try {
       setTheme(config.theme)
@@ -122,7 +122,7 @@ export default function UserModal({ open, onClose }) {
     }
   }
 
-  async function handleClearApiKey() {
+  const handleClearApiKey = async () => {
     try {
       await clearApiKey()
       message.success('已清除 API Key，将使用服务端默认配置')
@@ -131,7 +131,7 @@ export default function UserModal({ open, onClose }) {
     }
   }
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     await logout()
     onClose()
   }
@@ -277,6 +277,13 @@ export default function UserModal({ open, onClose }) {
       </div>
 
       <div className={styles.configFooter}>
+        <Button
+          onClick={() => {
+            window.location.href = '/api/export'
+          }}
+        >
+          导出我的数据
+        </Button>
         <Button type="primary" loading={savingConfig} onClick={saveConfig}>
           保存配置
         </Button>
@@ -297,3 +304,5 @@ export default function UserModal({ open, onClose }) {
     </Modal>
   )
 }
+
+export default UserModal

@@ -5,7 +5,7 @@ import Router from './router'
 import { AuthProvider, useAuthContext } from './context/AuthContext'
 import { ChatProvider } from './context/ChatContext'
 
-function ChatRoot() {
+const ChatRoot = () => {
   const { user, loading } = useAuthContext()
 
   if (loading) {
@@ -29,10 +29,12 @@ function ChatRoot() {
   )
 }
 
-export default function App() {
+const App = () => {
   return (
     <AuthProvider>
       <ChatRoot />
     </AuthProvider>
   )
 }
+
+export default App

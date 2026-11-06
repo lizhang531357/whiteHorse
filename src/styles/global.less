@@ -7,7 +7,10 @@
   --bm-surface-weak: #fafafa;
   --bm-surface-strong: #ececec;
   --bm-hover: #ececec;
-  --bm-bubble-user: #f3f4f6;
+  --bm-bubble-user: #e6f1ff;
+  --bm-bubble-user-border: #cfe2f8;
+  --bm-attach-bg: #f4f8fd;
+  --bm-attach-border: #d8e6f5;
   --bm-chip-bg: #f3f6fb;
   --bm-chip-border: #e2e8f0;
   --bm-text: #1a1a1a;
@@ -29,7 +32,10 @@
   --bm-surface-weak: #1f2125;
   --bm-surface-strong: #2f3237;
   --bm-hover: #2a2d31;
-  --bm-bubble-user: #2a2d31;
+  --bm-bubble-user: #1e3550;
+  --bm-bubble-user-border: #2c4a6d;
+  --bm-attach-bg: #1f2630;
+  --bm-attach-border: #334050;
   --bm-chip-bg: #24272c;
   --bm-chip-border: #34373c;
   --bm-text: #e8e8e6;
@@ -65,6 +71,23 @@ html body {
 
 ::selection {
   background: @accent-weak;
+}
+
+// 统一所有 antd 输入框的圆角与聚焦样式
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select:not(.ant-select-customize-input) .ant-select-selector {
+  border-radius: 8px;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-select-focused:not(.ant-select-disabled).ant-select:not(.ant-select-customize-input)
+  .ant-select-selector {
+  border-color: @accent;
+  box-shadow: 0 0 0 2px @accent-weak;
 }
 
 .app-loading {

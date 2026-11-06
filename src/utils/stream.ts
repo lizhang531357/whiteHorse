@@ -1,5 +1,14 @@
-export async function consumeSSE(response, handlers = {}) {
-  const { onDelta, onReasoning, onPrompt, onError } = handlers
+interface SSEHandlers {
+  onDelta?: (delta: string) => void
+  onReasoning?: (delta: string) => void
+  onPrompt?: (content: string) => void
+  onFiles?: (files: any[]) => void
+  onUsage?: (usage: any) => void
+  onError?: (message: string) => void
+}
+
+export const consumeSSE = async (response: Response, handlers: SSEHandlers = {}) => {
+  const { onDelta, onReasoning, onPrompt, onFiles, onUsage, onError } = handlers
 
   if (!response.body) throw new Error('服务端未返回流式内容')
 
@@ -36,6 +45,13 @@ export async function consumeSSE(response, handlers = {}) {
           continue
         }
 
+        if (json.type === 'files') {
+          onFiles?.(json.files || [])
+          continue
+        }
+
+        if (json.usage) onUsage?.(json.usage)
+
         if (json.error) {
           const message =
             typeof json.error === 'string'
@@ -56,7 +72,7 @@ export async function consumeSSE(response, handlers = {}) {
   }
 }
 
-export async function requestChat(payload, signal) {
+export const requestChat = async (payload: unknown, signal?: AbortSignal) => {
   return fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

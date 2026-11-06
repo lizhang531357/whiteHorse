@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Modal } from 'antd'
+import { Button, Modal } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import Composer from '../../components/Composer'
 import MessageItem from '../../components/MessageItem'
@@ -8,7 +8,7 @@ import styles from './index.module.less'
 
 const BOTTOM_THRESHOLD = 80
 
-export default function Chat() {
+const Chat = () => {
   const {
     current,
     currentId,
@@ -46,7 +46,7 @@ export default function Chat() {
     return () => cancelAnimationFrame(raf)
   }, [currentId, scrollToBottom])
 
-  function handleScroll() {
+  const handleScroll = () => {
     const el = scrollRef.current
     if (!el) return
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight
@@ -55,7 +55,7 @@ export default function Chat() {
     setAtBottom(near)
   }
 
-  function handleDelete(messageId) {
+  const handleDelete = (messageId) => {
     Modal.confirm({
       title: '删除消息',
       content: '删除后无法恢复，确定继续吗？',
@@ -102,14 +102,13 @@ export default function Chat() {
       </div>
 
       {!atBottom && (
-        <button
-          type="button"
+        <Button
           className={styles.toBottom}
+          shape="circle"
+          icon={<DownOutlined />}
           onClick={() => scrollToBottom('smooth')}
           aria-label="回到底部"
-        >
-          <DownOutlined />
-        </button>
+        />
       )}
 
       <div className={styles.footer}>
@@ -118,3 +117,5 @@ export default function Chat() {
     </div>
   )
 }
+
+export default Chat

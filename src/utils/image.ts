@@ -1,6 +1,6 @@
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp)$/i
 
-export async function createThumbnail(file, maxSize = 320, quality = 0.72) {
+export const createThumbnail = async (file, maxSize = 320, quality = 0.72) => {
   const isImage = String(file?.type || '').startsWith('image/') || IMAGE_EXT_RE.test(file?.name || '')
   if (!isImage) return ''
 

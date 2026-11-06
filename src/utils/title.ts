@@ -1,4 +1,4 @@
-export function deriveTitle(text = '', files = []) {
+export const deriveTitle = (text = '', files = []) => {
   const clean = String(text)
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/[#>*_`~[\]]/g, ' ')

@@ -1,4 +1,4 @@
-export function loadJSON(key, fallback) {
+export const loadJSON = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key)
     if (raw == null) return fallback
@@ -8,7 +8,7 @@ export function loadJSON(key, fallback) {
   }
 }
 
-export function saveJSON(key, value) {
+export const saveJSON = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch {
@@ -16,7 +16,7 @@ export function saveJSON(key, value) {
   }
 }
 
-export function loadString(key, fallback = '') {
+export const loadString = (key, fallback = '') => {
   try {
     const raw = localStorage.getItem(key)
     return raw == null ? fallback : raw
@@ -25,7 +25,7 @@ export function loadString(key, fallback = '') {
   }
 }
 
-export function saveString(key, value) {
+export const saveString = (key, value) => {
   try {
     localStorage.setItem(key, value)
   } catch {
@@ -33,7 +33,7 @@ export function saveString(key, value) {
   }
 }
 
-export function removeKey(key) {
+export const removeKey = (key) => {
   try {
     localStorage.removeItem(key)
   } catch {

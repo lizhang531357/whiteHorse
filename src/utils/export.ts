@@ -1,13 +1,13 @@
-function stamp(date = new Date()) {
+const stamp = (date = new Date()) => {
   const pad = (n) => String(n).padStart(2, '0')
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
 }
 
-function safeName(name = 'conversation') {
+const safeName = (name = 'conversation') => {
   return String(name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'conversation'
 }
 
-export function conversationToMarkdown(conversation) {
+export const conversationToMarkdown = (conversation) => {
   const lines = [`# ${conversation.title || '对话'}`, '']
   for (const message of conversation.messages || []) {
     if (message.role === 'user') {
@@ -29,7 +29,7 @@ export function conversationToMarkdown(conversation) {
   return lines.join('\n')
 }
 
-export function downloadText(filename, text, mime = 'text/plain;charset=utf-8') {
+export const downloadText = (filename, text, mime = 'text/plain;charset=utf-8') => {
   const blob = new Blob([text], { type: mime })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -41,7 +41,7 @@ export function downloadText(filename, text, mime = 'text/plain;charset=utf-8') 
   URL.revokeObjectURL(url)
 }
 
-export function exportConversation(conversation, format = 'md') {
+export const exportConversation = (conversation, format = 'md') => {
   const name = safeName(conversation.title)
   if (format === 'json') {
     downloadText(`${name}-${stamp()}.json`, JSON.stringify(conversation, null, 2), 'application/json')

@@ -7,7 +7,7 @@ import { useState } from 'react'
 import 'highlight.js/styles/github-dark.css'
 import styles from './index.module.less'
 
-function extractText(node) {
+const extractText = (node) => {
   if (node == null) return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractText).join('')
@@ -15,14 +15,14 @@ function extractText(node) {
   return ''
 }
 
-function CodeBlock({ node, children, ...props }) {
+const CodeBlock = ({ node, children, ...props }) => {
   const [copied, setCopied] = useState(false)
   const codeEl = Array.isArray(children) ? children[0] : children
   const className = codeEl?.props?.className || ''
   const lang = /language-([\w-]+)/.exec(className)?.[1] || 'code'
   const text = extractText(codeEl)
 
-  async function handleCopy() {
+  const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -49,7 +49,7 @@ function CodeBlock({ node, children, ...props }) {
   )
 }
 
-export default function MarkdownRenderer({ content = '' }) {
+const MarkdownRenderer = ({ content = '' }) => {
   return (
     <div className={styles.markdown}>
       <ReactMarkdown
@@ -57,20 +57,16 @@ export default function MarkdownRenderer({ content = '' }) {
         rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
         components={{
           pre: CodeBlock,
-          a({ node, children, ...props }) {
-            return (
-              <a {...props} target="_blank" rel="noreferrer noopener">
-                {children}
-              </a>
-            )
-          },
-          table({ children }) {
-            return (
-              <div className={styles.tableWrap}>
-                <table>{children}</table>
-              </div>
-            )
-          },
+          a: ({ node, children, ...props }) => (
+            <a {...props} target="_blank" rel="noreferrer noopener">
+              {children}
+            </a>
+          ),
+          table: ({ children }) => (
+            <div className={styles.tableWrap}>
+              <table>{children}</table>
+            </div>
+          ),
         }}
       >
         {content || ''}
@@ -78,3 +74,5 @@ export default function MarkdownRenderer({ content = '' }) {
     </div>
   )
 }
+
+export default MarkdownRenderer

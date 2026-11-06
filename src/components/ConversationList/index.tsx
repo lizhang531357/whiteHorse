@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Tooltip, message } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   DeleteOutlined,
   EditOutlined,
@@ -10,25 +11,26 @@ import {
 } from '@ant-design/icons'
 import { useChatContext } from '../../context/ChatContext'
 import { exportConversation } from '../../utils/export'
+import type { Conversation } from '../../types'
 import styles from './index.module.less'
 
-function pad(n) {
+const pad = (n: number) => {
   return String(n).padStart(2, '0')
 }
 
-function formatTime(ts) {
+const formatTime = (ts: number) => {
   const date = new Date(ts)
   const now = new Date()
   if (date.toDateString() === now.toDateString()) {
     return `${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
-  if (now - date < 7 * 24 * 3600 * 1000) {
+  if (now.getTime() - date.getTime() < 7 * 24 * 3600 * 1000) {
     return `周${'日一二三四五六'[date.getDay()]}`
   }
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
-export default function ConversationList({ collapsed, onNavigate }) {
+const ConversationList = ({ collapsed, onNavigate }) => {
   const {
     conversations,
     currentId,
@@ -38,26 +40,39 @@ export default function ConversationList({ collapsed, onNavigate }) {
     deleteConversation,
   } = useChatContext()
 
-  const [renameTarget, setRenameTarget] = useState(null)
+  const [renameTarget, setRenameTarget] = useState<Conversation | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [keyword, setKeyword] = useState('')
 
-  const sorted = useMemo(
-    () => [...conversations].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
-    [conversations],
-  )
+  const sorted = useMemo(() => {
+    const list = [...conversations].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    const kw = keyword.trim().toLowerCase()
+    if (!kw) return list
 
-  function startRename(conv) {
+    return list.filter((conv) => {
+      if (String(conv.title || '').toLowerCase().includes(kw)) return true
+      return (conv.messages || []).some((m) => {
+        const hay = [m.content, m.promptContent, (m.files || []).map((f) => f.name).join(' ')]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return hay.includes(kw)
+      })
+    })
+  }, [conversations, keyword])
+
+  const startRename = (conv: Conversation) => {
     setRenameTarget(conv)
     setRenameValue(conv.title)
   }
 
-  function submitRename() {
+  const submitRename = () => {
     if (!renameTarget) return
     renameConversation(renameTarget.id, renameValue)
     setRenameTarget(null)
   }
 
-  function confirmDelete(conv) {
+  const confirmDelete = (conv: Conversation) => {
     Modal.confirm({
       title: '删除对话',
       content: `确定删除「${conv.title}」吗？删除后无法恢复。`,
@@ -68,12 +83,12 @@ export default function ConversationList({ collapsed, onNavigate }) {
     })
   }
 
-  function menuFor(conv) {
+  const menuFor = (conv: Conversation): MenuProps => {
     return {
       items: [
         { key: 'rename', icon: <EditOutlined />, label: '重命名' },
         { key: 'export', icon: <ExportOutlined />, label: '导出 Markdown' },
-        { type: 'divider' },
+        { type: 'divider' as const },
         { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
       ],
       onClick: ({ key, domEvent }) => {
@@ -119,9 +134,22 @@ export default function ConversationList({ collapsed, onNavigate }) {
         新建对话
       </Button>
 
+      <Input.Search
+        className={styles.search}
+        size="small"
+        allowClear
+        placeholder="搜索对话"
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+      />
+
       <div className={styles.list}>
         {sorted.length === 0 ? (
-          <Empty className={styles.empty} image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有对话" />
+          <Empty
+            className={styles.empty}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={keyword.trim() ? '没有匹配的对话' : '还没有对话'}
+          />
         ) : (
           sorted.map((conv) => (
             <div
@@ -168,3 +196,5 @@ export default function ConversationList({ collapsed, onNavigate }) {
     </div>
   )
 }
+
+export default ConversationList

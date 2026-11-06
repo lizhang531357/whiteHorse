@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS } from '../constants'
 import { api } from '../utils/api'
 
-export function useSettings(userId) {
+export const useSettings = (userId) => {
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS })
   const [apiKeyState, setApiKeyState] = useState({ hasApiKey: false, apiKeyMasked: '' })
   const [loading, setLoading] = useState(true)

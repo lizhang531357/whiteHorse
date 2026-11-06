@@ -1,23 +1,41 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Form, Input, Tabs, message } from 'antd'
 import { LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons'
 import { useAuthContext } from '../../context/AuthContext'
 import styles from './index.module.less'
 
-export default function LoginPage() {
+const LoginPage = () => {
   const { login, register } = useAuthContext()
   const [form] = Form.useForm()
   const [tab, setTab] = useState('login')
   const [submitting, setSubmitting] = useState(false)
+  const [allowRegister, setAllowRegister] = useState(true)
 
-  function switchTab(key) {
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setAllowRegister(data.allowRegister !== false)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!allowRegister) setTab('login')
+  }, [allowRegister])
+
+  const switchTab = (key) => {
     const email = form.getFieldValue('email')
     setTab(key)
     form.resetFields()
     if (email) form.setFieldsValue({ email })
   }
 
-  async function submit(values) {
+  const submit = async (values) => {
     if (submitting) return
     setSubmitting(true)
     try {
@@ -51,10 +69,12 @@ export default function LoginPage() {
         </div>
         <p className={styles.subtitle}>登录后对话记录会同步保存到服务端</p>
 
-        <Tabs centered activeKey={tab} onChange={switchTab} className={styles.tabs}>
-          <Tabs.TabPane tab="登录" key="login" />
-          <Tabs.TabPane tab="注册" key="register" />
-        </Tabs>
+        {allowRegister && (
+          <Tabs centered activeKey={tab} onChange={switchTab} className={styles.tabs}>
+            <Tabs.TabPane tab="登录" key="login" />
+            <Tabs.TabPane tab="注册" key="register" />
+          </Tabs>
+        )}
 
         <Form
           form={form}
@@ -112,9 +132,15 @@ export default function LoginPage() {
         </Form>
 
         <p className={styles.hint}>
-          {tab === 'login' ? '还没有账号？切到「注册」创建' : '注册成功后会自动登录'}
+          {!allowRegister
+            ? '注册已关闭，请使用已有账号登录'
+            : tab === 'login'
+              ? '还没有账号？切到「注册」创建'
+              : '注册成功后会自动登录'}
         </p>
       </div>
     </div>
   )
 }
+
+export default LoginPage

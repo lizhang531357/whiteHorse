@@ -4,7 +4,7 @@ import { uid } from '../utils/id'
 import { loadJSON, saveJSON } from '../utils/storage'
 import { api } from '../utils/api'
 
-export function useConversations(userId) {
+export const useConversations = (userId) => {
   const cacheKey = `baima:conversations:${userId || 'guest'}`
   const currentKey = `${cacheKey}:current`
 
@@ -202,6 +202,23 @@ export function useConversations(userId) {
     )
   }, [])
 
+  const updateMessageFiles = useCallback((convId, msgId, updater) => {
+    setConversations((prev) =>
+      prev.map((conv) => {
+        if (conv.id !== convId) return conv
+        return {
+          ...conv,
+          messages: conv.messages.map((msg) => {
+            if (msg.id !== msgId) return msg
+            const nextFiles =
+              typeof updater === 'function' ? updater(msg.files || []) : updater
+            return { ...msg, files: nextFiles }
+          }),
+        }
+      }),
+    )
+  }, [])
+
   const touchConversation = useCallback((convId) => {
     setConversations((prev) =>
       prev.map((conv) => (conv.id === convId ? { ...conv, updatedAt: Date.now() } : conv)),
@@ -225,6 +242,7 @@ export function useConversations(userId) {
     truncateFrom,
     truncateAfter,
     touchConversation,
+    updateMessageFiles,
     deriveTitle,
   }
 }

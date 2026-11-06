@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Input, Tooltip, Upload, message as antdMessage } from 'antd'
+import { Button, Input, Tag, Tooltip, Upload, message as antdMessage } from 'antd'
 import {
   ArrowUpOutlined,
   AudioOutlined,
-  CloseOutlined,
   FileTextOutlined,
   PaperClipOutlined,
   PictureOutlined,
@@ -18,7 +17,7 @@ import styles from './index.module.less'
 const ACCEPT =
   '.txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.xml,.yml,.yaml,.js,.jsx,.ts,.tsx,.css,.less,.scss,.html,.htm,.vue,.py,.java,.kt,.c,.h,.cpp,.hpp,.cs,.go,.rs,.rb,.php,.swift,.dart,.sql,.sh,.bash,.zsh,.env,.ini,.toml,.conf,.pdf,.docx,.jpg,.jpeg,.png,.gif,.webp,.bmp'
 
-export default function Composer() {
+const Composer = () => {
   const { sendMessage, stop, loading, currentId, getDraft, setDraft, clearDraft } = useChatContext()
   const draftKey = currentId || 'new'
   const initialDraft = getDraft(draftKey)
@@ -37,7 +36,7 @@ export default function Composer() {
     setDraft(draftKey, { text: input, files })
   }, [draftKey, input, files, setDraft])
 
-  function addFile(file) {
+  const addFile = (file) => {
     if (file.size > MAX_FILE_SIZE) {
       antdMessage.error(`${file.name} 超过 8MB，无法上传`)
       return
@@ -69,15 +68,15 @@ export default function Composer() {
     }
   }
 
-  function addFiles(list) {
+  const addFiles = (list) => {
     Array.from(list || []).forEach(addFile)
   }
 
-  function removeFile(uid) {
+  const removeFile = (uid) => {
     setFiles((prev) => prev.filter((item) => item.uid !== uid))
   }
 
-  async function handleSend() {
+  const handleSend = async () => {
     const text = input.trim()
     if ((!text && files.length === 0) || loading) return
     const sentFiles = files
@@ -87,14 +86,14 @@ export default function Composer() {
     await sendMessage({ text, files: sentFiles })
   }
 
-  function handlePressEnter(e) {
+  const handlePressEnter = (e) => {
     if (composingRef.current || e.nativeEvent?.isComposing) return
     if (e.shiftKey) return
     e.preventDefault()
     handleSend()
   }
 
-  function handlePaste(e) {
+  const handlePaste = (e) => {
     const items = e.clipboardData?.items
     if (!items) return
     const pasted = []
@@ -110,17 +109,17 @@ export default function Composer() {
     }
   }
 
-  function handleDragEnter(e) {
+  const handleDragEnter = (e) => {
     e.preventDefault()
     dragDepthRef.current += 1
     setDragging(true)
   }
 
-  function handleDragOver(e) {
+  const handleDragOver = (e) => {
     e.preventDefault()
   }
 
-  function handleDragLeave(e) {
+  const handleDragLeave = (e) => {
     e.preventDefault()
     dragDepthRef.current -= 1
     if (dragDepthRef.current <= 0) {
@@ -129,7 +128,7 @@ export default function Composer() {
     }
   }
 
-  function handleDrop(e) {
+  const handleDrop = (e) => {
     e.preventDefault()
     dragDepthRef.current = 0
     setDragging(false)
@@ -149,7 +148,12 @@ export default function Composer() {
       {files.length > 0 && (
         <div className={styles.pendingFiles}>
           {files.map((item) => (
-            <span key={item.uid} className={styles.fileChip}>
+            <Tag
+              key={item.uid}
+              className={styles.fileTag}
+              closable
+              onClose={() => removeFile(item.uid)}
+            >
               {item.preview ? (
                 <img className={styles.thumb} src={item.preview} alt={item.name} />
               ) : item.type?.startsWith('image/') ? (
@@ -158,10 +162,10 @@ export default function Composer() {
                 <FileTextOutlined className={styles.fileIcon} />
               )}
               <span className={styles.fileName} title={item.name}>
-                {item.name} · {formatSize(item.size)}
+                {item.name}
               </span>
-              <CloseOutlined className={styles.fileRemove} onClick={() => removeFile(item.uid)} />
-            </span>
+              <span className={styles.fileSize}>{formatSize(item.size)}</span>
+            </Tag>
           ))}
         </div>
       )}
@@ -242,3 +246,5 @@ export default function Composer() {
     </div>
   )
 }
+
+export default Composer

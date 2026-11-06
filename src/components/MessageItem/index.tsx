@@ -1,9 +1,10 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
-import { Button, Image, Input, Spin, Tooltip, message as antdMessage } from 'antd'
+import { Button, Image, Input, Modal, Spin, Tag, Tooltip, message as antdMessage } from 'antd'
 import {
   CheckOutlined,
   CopyOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   DownOutlined,
   EditOutlined,
   FileTextOutlined,
@@ -16,47 +17,82 @@ import styles from './index.module.less'
 
 const MarkdownRenderer = lazy(() => import('../MarkdownRenderer'))
 
-function MessageFiles({ files = [] }) {
+const MessageFiles = ({ files = [] }) => {
   if (!files.length) return null
   return (
     <div className={styles.files}>
       {files.map((file, index) => {
         const isImage = isImageFile(file)
-        if (file.preview) {
+        const href = file.id ? `/api/files/${file.id}` : ''
+
+        if (isImage && file.preview) {
           return (
-            <Image
-              key={`${file.name}-${index}`}
-              src={file.preview}
-              width={72}
-              height={72}
-              className={styles.imageThumb}
-              preview={{ src: file.preview }}
-            />
+            <div key={`${file.name}-${index}`} className={styles.imageItem}>
+              <Image
+                src={file.preview}
+                width={72}
+                height={72}
+                className={styles.imageThumb}
+                preview={{ src: file.preview }}
+              />
+              {href && (
+                <Button
+                  type="link"
+                  size="small"
+                  className={styles.downloadBtn}
+                  icon={<DownloadOutlined />}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  原图
+                </Button>
+              )}
+            </div>
           )
         }
+
+        if (href) {
+          return (
+            <Button
+              key={`${file.name}-${index}`}
+              size="small"
+              className={styles.fileButton}
+              icon={isImage ? <PictureOutlined /> : <FileTextOutlined />}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              title={`${file.name} · ${formatSize(file.size)}`}
+            >
+              <span className={styles.fileName}>{file.name}</span>
+              <DownloadOutlined className={styles.downloadIcon} />
+            </Button>
+          )
+        }
+
         return (
-          <span
+          <Tag
             key={`${file.name}-${index}`}
-            className={styles.fileChip}
+            className={styles.fileTag}
+            icon={isImage ? <PictureOutlined /> : <FileTextOutlined />}
             title={`${file.name} · ${formatSize(file.size)}`}
           >
-            {isImage ? <PictureOutlined /> : <FileTextOutlined />}
             <span className={styles.fileName}>{file.name}</span>
-          </span>
+          </Tag>
         )
       })}
     </div>
   )
 }
 
-export default function MessageItem({
+const MessageItem = ({
   message,
   streaming = false,
   canOperate = true,
   onRegenerate,
   onEdit,
   onDelete,
-}) {
+}) => {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content || '')
   const [copied, setCopied] = useState(false)
@@ -68,7 +104,7 @@ export default function MessageItem({
 
   const copyText = useMemo(() => message.content || '', [message.content])
 
-  async function handleCopy() {
+  const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(copyText)
       setCopied(true)
@@ -79,16 +115,25 @@ export default function MessageItem({
     }
   }
 
-  function startEdit() {
+  const startEdit = () => {
     setDraft(message.content || '')
     setEditing(true)
   }
 
-  async function saveEdit() {
+  const saveEdit = () => {
     const text = draft.trim()
     if (!text) return
-    setEditing(false)
-    await onEdit?.(message.id, text)
+
+    Modal.confirm({
+      title: '编辑并重新发送',
+      content: '保存后会删除这条消息之后的所有内容，并重新请求模型，确定继续吗？',
+      okText: '继续',
+      cancelText: '取消',
+      onOk: async () => {
+        setEditing(false)
+        await onEdit?.(message.id, text)
+      },
+    })
   }
 
   if (isError) {
@@ -130,26 +175,37 @@ export default function MessageItem({
 
         {!isUser && hasReasoning && (
           <div className={styles.reasoning}>
-            <button type="button" className={styles.reasoningToggle} onClick={() => setShowReasoning((v) => !v)}>
-              {showReasoning ? <DownOutlined /> : <RightOutlined />}
-              <span>{streaming && !message.content ? '正在思考…' : '思考过程'}</span>
-            </button>
+            <Button
+              type="text"
+              size="small"
+              className={styles.reasoningToggle}
+              icon={showReasoning ? <DownOutlined /> : <RightOutlined />}
+              onClick={() => setShowReasoning((v) => !v)}
+            >
+              {streaming && !message.content ? '正在思考…' : '思考过程'}
+            </Button>
             {showReasoning && <div className={styles.reasoningBody}>{message.reasoning}</div>}
           </div>
         )}
 
         {editing ? (
           <div className={styles.editor}>
+            <div className={styles.editorTitle}>
+              <EditOutlined />
+              编辑消息
+            </div>
             <Input.TextArea
-              autoSize={{ minRows: 2, maxRows: 8 }}
+              className={styles.editorInput}
+              autoSize={{ minRows: 3, maxRows: 10 }}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
+            <div className={styles.editorHint}>保存后会删除这条消息之后的内容，并重新请求模型</div>
             <div className={styles.editorActions}>
               <Button size="small" onClick={() => setEditing(false)}>
                 取消
               </Button>
-              <Button size="small" type="primary" onClick={saveEdit}>
+              <Button size="small" type="primary"  onClick={saveEdit}>
                 保存并重新发送
               </Button>
             </div>
@@ -168,6 +224,13 @@ export default function MessageItem({
             </Suspense>
             {streaming && <span className={styles.cursor} />}
             {message.error && <div className={styles.streamError}>{message.error}</div>}
+          </div>
+        )}
+
+        {!isUser && !streaming && message.usage && (
+          <div className={styles.usage}>
+            输入 {message.usage.prompt_tokens ?? '-'} · 输出{' '}
+            {message.usage.completion_tokens ?? '-'} · 共 {message.usage.total_tokens ?? '-'} tokens
           </div>
         )}
 
@@ -206,3 +269,5 @@ export default function MessageItem({
     </div>
   )
 }
+
+export default MessageItem
