@@ -2,6 +2,9 @@ import http from 'node:http';
 import net from 'node:net';
 import dns from 'node:dns/promises';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   publicUser,
   getUserByEmail,
@@ -14,6 +17,8 @@ import {
   deleteConversations,
   getRawSettings,
   saveSettings,
+  createFileRecord,
+  getFileRecord,
   cleanupSessions,
 } from './server/db.js';
 import {
@@ -30,6 +35,12 @@ import {
 const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
 const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const PORT = process.env.PORT || 3001;
+const ALLOW_REGISTER = process.env.ALLOW_REGISTER !== 'false';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.join(rootDir, 'dist');
+const dataRoot = process.env.DATA_DIR || path.join(rootDir, 'data');
+const uploadsDir = path.join(dataRoot, 'uploads');
 
 // 5 个 8MB 附件经 base64 编码后约 53MB，留出余量
 const MAX_BODY_BYTES = 60 * 1024 * 1024;
@@ -37,6 +48,8 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_ITEM_CHARS = 12000;
 const MAX_TOTAL_CHARS = 40000;
 const MAX_HISTORY_ITEMS = 30;
+const MAX_HISTORY_IMAGES = 8;
+const MAX_IMAGE_URL_CHARS = 800000;
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是白马AI，一个乐于助人的 AI 助手。用户消息后面可能附带从附件或链接中读取的内容，' +
@@ -127,24 +140,57 @@ async function docxToText(buffer) {
   return result.value;
 }
 
+function isZipBuffer(buffer) {
+  return (
+    buffer.length >= 4 &&
+    buffer[0] === 0x50 &&
+    buffer[1] === 0x4b &&
+    (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07)
+  );
+}
+
 async function extractBuffer(buffer, name, type = '') {
   if (buffer.length > MAX_FILE_BYTES) {
     throw new Error('文件超过 8MB');
   }
 
   const ext = extOf(name);
-  if (TEXT_EXTS.has(ext) || isTextType(type)) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  if (ext === 'pdf' || type.includes('pdf')) {
+  const lowerType = String(type || '').toLowerCase();
+
+  // 先按二进制文档格式识别，避免 MIME 里的 "openxmlformats/xml" 被当成文本
+  if (ext === 'pdf' || lowerType.includes('pdf')) {
     return pdfToText(buffer);
   }
-  if (ext === 'docx' || type.includes('wordprocessingml')) {
+  if (ext === 'docx' || lowerType.includes('wordprocessingml.document')) {
     return docxToText(buffer);
+  }
+  if (ext === 'doc' || lowerType.includes('msword')) {
+    throw new Error('暂不支持旧版 .doc，请用 Word 另存为 .docx 后再上传');
+  }
+  if (
+    ext === 'xlsx' ||
+    ext === 'xls' ||
+    lowerType.includes('spreadsheetml') ||
+    lowerType.includes('ms-excel')
+  ) {
+    throw new Error('暂不支持 Excel 文件，请把内容复制成文本后再上传');
+  }
+  if (
+    ext === 'pptx' ||
+    ext === 'ppt' ||
+    lowerType.includes('presentationml') ||
+    lowerType.includes('ms-powerpoint')
+  ) {
+    throw new Error('暂不支持 PPT 文件，请把内容复制成文本后再上传');
+  }
+
+  // 真正的文本类型（排除 ZIP 包头，防止把 office 压缩包当文本）
+  if ((TEXT_EXTS.has(ext) || isTextType(type)) && !isZipBuffer(buffer)) {
+    return new TextDecoder('utf-8').decode(buffer);
   }
 
   const text = buffer.toString('utf8');
-  if (!text.includes('\u0000')) return text;
+  if (!isZipBuffer(buffer) && !text.includes('\u0000')) return text;
   throw new Error('暂不支持该文件类型，请上传文本 / PDF / Word(docx)');
 }
 
@@ -280,24 +326,54 @@ function clampTemperature(value) {
 
 function normalizeHistory(history) {
   if (!Array.isArray(history)) return [];
-  const items = history
-    .filter(
-      (item) =>
-        item &&
-        (item.role === 'user' || item.role === 'assistant') &&
-        typeof item.content === 'string' &&
-        item.content.trim(),
-    )
-    .slice(-MAX_HISTORY_ITEMS)
-    .map((item) => ({ role: item.role, content: item.content.slice(0, MAX_ITEM_CHARS) }));
 
-  let total = 0;
+  const source = history.slice(-MAX_HISTORY_ITEMS);
   const kept = [];
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    total += items[i].content.length;
+  let total = 0;
+  let images = 0;
+
+  for (let i = source.length - 1; i >= 0; i -= 1) {
+    const item = source[i];
+    if (!item || (item.role !== 'user' && item.role !== 'assistant')) continue;
+
+    const content = item.content;
+    let normalized = null;
+
+    if (typeof content === 'string') {
+      const text = content.trim();
+      if (!text) continue;
+      const clipped = text.slice(0, MAX_ITEM_CHARS);
+      total += clipped.length;
+      normalized = { role: item.role, content: clipped };
+    } else if (Array.isArray(content)) {
+      const parts = [];
+      for (const part of content) {
+        if (!part || typeof part !== 'object') continue;
+
+        if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+          const text = part.text.slice(0, MAX_ITEM_CHARS);
+          parts.push({ type: 'text', text });
+          total += text.length;
+        } else if (
+          part.type === 'image_url' &&
+          part.image_url &&
+          typeof part.image_url.url === 'string' &&
+          part.image_url.url.startsWith('data:image/') &&
+          part.image_url.url.length <= MAX_IMAGE_URL_CHARS &&
+          images < MAX_HISTORY_IMAGES
+        ) {
+          parts.push({ type: 'image_url', image_url: { url: part.image_url.url } });
+          images += 1;
+        }
+      }
+      if (parts.length) normalized = { role: item.role, content: parts };
+    }
+
+    if (!normalized) continue;
     if (total > MAX_TOTAL_CHARS * 2) break;
-    kept.unshift(items[i]);
+    kept.unshift(normalized);
   }
+
   return kept;
 }
 
@@ -309,6 +385,43 @@ function sendJson(res, status, payload) {
 function sendError(res, status, message, extra) {
   sendJson(res, status, { error: message, ...(extra || {}) });
 }
+
+const rateBuckets = new Map();
+
+function clientIp(req) {
+  const cf = req.headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && cf.trim()) return cf.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || 'unknown';
+}
+
+function checkRate(key, limit, windowMs) {
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.start >= windowMs) {
+    bucket = { start: now, count: 0 };
+    rateBuckets.set(key, bucket);
+  }
+  bucket.count += 1;
+  return bucket.count <= limit;
+}
+
+function rateLimited(res, retryAfter = 60) {
+  res.writeHead(429, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Retry-After': String(retryAfter),
+  });
+  res.end(JSON.stringify({ error: '请求过于频繁，请稍后再试' }));
+}
+
+const rateCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of rateBuckets) {
+    if (now - bucket.start > 10 * 60 * 1000) rateBuckets.delete(key);
+  }
+}, 60 * 1000);
+rateCleanupTimer.unref?.();
 
 async function readJsonBody(req, res) {
   let body;
@@ -341,6 +454,30 @@ function pickColor() {
   return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 }
 
+function safeExtOf(name = '') {
+  const match = /\.([a-zA-Z0-9]{1,8})$/.exec(String(name));
+  return match ? `.${match[1].toLowerCase()}` : '';
+}
+
+function saveUploadedFile(userId, name, type, buffer) {
+  try {
+    const id = crypto.randomUUID();
+    const ext = safeExtOf(name);
+    const dir = path.join(uploadsDir, userId);
+    fs.mkdirSync(dir, { recursive: true });
+    const relativePath = path.join(userId, `${id}${ext}`);
+    fs.writeFileSync(path.join(uploadsDir, relativePath), buffer);
+
+    const displayName = String(name || '未命名附件').slice(0, 200);
+    const mime = String(type || 'application/octet-stream').slice(0, 120);
+    createFileRecord({ id, userId, name: displayName, size: buffer.length, mime, path: relativePath });
+
+    return { id, name: displayName, size: buffer.length, type: mime };
+  } catch {
+    return null;
+  }
+}
+
 function maskKey(key = '') {
   if (!key) return '';
   if (key.length <= 8) return '••••••';
@@ -359,6 +496,10 @@ function settingsView(userId) {
 }
 
 async function handleRegister(req, res) {
+  if (!ALLOW_REGISTER) {
+    return sendError(res, 403, '注册已关闭，请使用已有账号登录');
+  }
+
   const body = await readJsonBody(req, res);
   if (!body) return;
 
@@ -477,6 +618,117 @@ async function handlePutSettings(req, res) {
   sendJson(res, 200, settingsView(user.id));
 }
 
+function handleExport(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const settings = getRawSettings(user.id);
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    user: publicUser(user),
+    settings: {
+      model: settings.model,
+      temperature: settings.temperature,
+      systemPrompt: settings.system_prompt,
+      hasApiKey: Boolean(settings.api_key),
+    },
+    conversations: listConversations(user.id),
+  };
+
+  res.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Disposition': `attachment; filename="baima-export-${Date.now()}.json"`,
+  });
+  res.end(JSON.stringify(payload, null, 2));
+}
+
+function handleFileDownload(req, res, fileId) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const record = getFileRecord(fileId, user.id);
+  if (!record) return sendError(res, 404, '文件不存在');
+
+  const filePath = path.resolve(uploadsDir, record.path);
+  if (!filePath.startsWith(uploadsDir + path.sep) || !fs.existsSync(filePath)) {
+    return sendError(res, 404, '文件不存在');
+  }
+
+  const filename = encodeURIComponent(record.name || 'file');
+  res.writeHead(200, {
+    'Content-Type': record.mime || 'application/octet-stream',
+    'Content-Length': record.size,
+    'Content-Disposition': `attachment; filename*=UTF-8''${filename}`,
+    'Cache-Control': 'private, max-age=0',
+  });
+  fs.createReadStream(filePath).pipe(res);
+}
+
+const TITLE_INSTRUCTION =
+  '你是一个标题生成助手。根据下面的对话内容，生成一个不超过 12 个字符的简短标题。只输出标题，不要引号、标点或解释。';
+
+async function handleTitle(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const text = String(body.text || '').trim().slice(0, 2000);
+  if (!text) return sendError(res, 400, '内容为空');
+
+  const settings = getRawSettings(user.id);
+  const apiKey = (settings.api_key || '').trim();
+  if (!apiKey) return sendError(res, 400, '未配置 API Key');
+
+  const model = settings.model || MODEL;
+  const isReasoner = /reasoner/i.test(model);
+  const messages = isReasoner
+    ? [{ role: 'user', content: `${TITLE_INSTRUCTION}\n\n对话内容：\n${text}` }]
+    : [
+        { role: 'system', content: TITLE_INSTRUCTION },
+        { role: 'user', content: text },
+      ];
+
+  const requestBody = {
+    model,
+    stream: false,
+    messages,
+    max_tokens: 256,
+  };
+  if (!isReasoner) requestBody.temperature = 0.3;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const upstream = await fetch(`${BASE_URL}/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!upstream.ok) return sendError(res, 502, '标题生成失败');
+
+    const data = await upstream.json();
+    const title = String(data?.choices?.[0]?.message?.content || '')
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/^["'“”‘’\s]+|["'“”‘’\s]+$/g, '')
+      .trim()
+      .slice(0, 20);
+
+    if (!title) return sendError(res, 502, '标题生成失败');
+    sendJson(res, 200, { title });
+  } catch {
+    sendError(res, 502, '标题生成失败');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function handleGetConversations(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -553,25 +805,29 @@ async function handleChat(req, res) {
   const urlsText = [];
   const imageUrls = [];
   const warnings = [];
+  const savedFiles = [];
 
   for (const attachment of attachments) {
     const name = attachment?.name || '未命名附件';
     const type = attachment?.type || '';
+    let saved = null;
     try {
       if (!attachment?.data) throw new Error('文件内容为空');
       const buffer = Buffer.from(attachment.data, 'base64');
       if (buffer.length > MAX_FILE_BYTES) throw new Error('文件超过 8MB');
 
+      saved = saveUploadedFile(authUser.id, name, type, buffer);
+
       if (isImage(name, type)) {
         imageUrls.push(`data:${imageMime(name, type)};base64,${buffer.toString('base64')}`);
-        continue;
+      } else {
+        const text = await extractBuffer(buffer, name, type);
+        attachmentsText.push(`--- 附件：${name} ---\n${truncate(text)}`);
       }
-
-      const text = await extractBuffer(buffer, name, type);
-      attachmentsText.push(`--- 附件：${name} ---\n${truncate(text)}`);
     } catch (err) {
       warnings.push(`附件「${name}」读取失败：${err.message}`);
     }
+    savedFiles.push(saved);
   }
 
   for (const url of pickUrls(message)) {
@@ -624,7 +880,12 @@ async function handleChat(req, res) {
     ];
   }
 
-  const requestBody = { model, stream: true, messages };
+  const requestBody = {
+    model,
+    stream: true,
+    messages,
+    stream_options: { include_usage: true },
+  };
   if (!isReasoner) {
     requestBody.temperature = temperature;
   }
@@ -676,6 +937,7 @@ async function handleChat(req, res) {
   });
 
   res.write(`data: ${JSON.stringify({ type: 'prompt', content: textContent })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'files', files: savedFiles })}\n\n`);
 
   const reader = upstream.body.getReader();
   try {
@@ -691,15 +953,95 @@ async function handleChat(req, res) {
   }
 }
 
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+function serveStatic(req, res, pathname) {
+  if (!fs.existsSync(distDir)) return false;
+
+  let relative = pathname;
+  try {
+    relative = decodeURIComponent(pathname);
+  } catch {
+    relative = pathname;
+  }
+  if (relative === '/') relative = '/index.html';
+
+  const target = path.resolve(distDir, `.${relative}`);
+  if (target !== distDir && !target.startsWith(distDir + path.sep)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return true;
+  }
+
+  let filePath = target;
+  if (!(fs.existsSync(filePath) && fs.statSync(filePath).isFile())) {
+    if (path.extname(relative)) return false;
+    filePath = path.join(distDir, 'index.html');
+    if (!fs.existsSync(filePath)) return false;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const isHashedAsset = filePath.includes(`${path.sep}assets${path.sep}`);
+  res.writeHead(200, {
+    'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+    'Cache-Control': isHashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache',
+  });
+
+  if (req.method === 'HEAD') {
+    res.end();
+    return true;
+  }
+
+  fs.createReadStream(filePath).pipe(res);
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
   const { method } = req;
 
   try {
+    if (pathname.startsWith('/api')) {
+      const ip = clientIp(req);
+      let allowed = true;
+      if (pathname === '/api/auth/login') {
+        allowed = checkRate(`login:${ip}`, 20, 5 * 60 * 1000);
+        if (!allowed) return rateLimited(res, 300);
+      } else if (pathname === '/api/auth/register') {
+        allowed = checkRate(`register:${ip}`, 5, 60 * 60 * 1000);
+        if (!allowed) return rateLimited(res, 3600);
+      } else if (pathname === '/api/chat') {
+        allowed = checkRate(`chat:${ip}`, 30, 60 * 1000);
+        if (!allowed) return rateLimited(res, 60);
+      } else {
+        allowed = checkRate(`api:${ip}`, 300, 60 * 1000);
+        if (!allowed) return rateLimited(res, 60);
+      }
+    }
+
     if (method === 'GET' && pathname === '/api/config') {
       sendJson(res, 200, {
         defaultModel: MODEL,
+        allowRegister: ALLOW_REGISTER,
         maxFiles: 5,
         maxFileSize: MAX_FILE_BYTES,
       });
@@ -715,12 +1057,27 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/settings') return handleGetSettings(req, res);
     if (method === 'PUT' && pathname === '/api/settings') return await handlePutSettings(req, res);
 
+    if (method === 'POST' && pathname === '/api/title') return await handleTitle(req, res);
+    if (method === 'GET' && pathname.startsWith('/api/files/')) {
+      const fileId = decodeURIComponent(pathname.slice('/api/files/'.length));
+      return handleFileDownload(req, res, fileId);
+    }
+
+    if (method === 'GET' && pathname === '/api/export') return handleExport(req, res);
     if (method === 'GET' && pathname === '/api/conversations') return handleGetConversations(req, res);
     if (method === 'POST' && pathname === '/api/conversations/sync') {
       return await handleSyncConversations(req, res);
     }
 
     if (method === 'POST' && pathname === '/api/chat') return await handleChat(req, res);
+
+    if (
+      !pathname.startsWith('/api') &&
+      (method === 'GET' || method === 'HEAD') &&
+      serveStatic(req, res, pathname)
+    ) {
+      return;
+    }
 
     res.writeHead(404);
     res.end('Not Found');

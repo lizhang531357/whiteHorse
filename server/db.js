@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { encryptSecret, decryptSecret, isEncrypted } from './crypto.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(dirname, '..', 'data');
+const dataDir = process.env.DATA_DIR || path.join(dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'baima.db'));
@@ -47,7 +48,29 @@ db.exec(`
     api_key TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mime TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
 `);
+
+// 把历史明文 API Key 迁移成密文
+try {
+  const pending = db.prepare("SELECT user_id, api_key FROM user_settings WHERE api_key <> ''").all();
+  const update = db.prepare('UPDATE user_settings SET api_key = ? WHERE user_id = ?');
+  for (const row of pending) {
+    if (!isEncrypted(row.api_key)) update.run(encryptSecret(row.api_key), row.user_id);
+  }
+} catch {
+  // 迁移失败不影响启动
+}
 
 const stmts = {
   insertUser: db.prepare(
@@ -181,15 +204,38 @@ export function deleteConversations(userId, ids) {
 }
 
 export function getRawSettings(userId) {
-  return (
-    stmts.getSettings.get(userId) || {
+  const row = stmts.getSettings.get(userId);
+  if (!row) {
+    return {
       user_id: userId,
       model: '',
       temperature: 0.7,
       system_prompt: '',
       api_key: '',
-    }
+    };
+  }
+  return { ...row, api_key: decryptSecret(row.api_key) };
+}
+
+const insertFile = db.prepare(
+  'INSERT INTO files (id, user_id, name, size, mime, path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+);
+const selectFile = db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ?');
+
+export function createFileRecord(file) {
+  insertFile.run(
+    file.id,
+    file.userId,
+    file.name,
+    file.size,
+    file.mime,
+    file.path,
+    Date.now(),
   );
+}
+
+export function getFileRecord(id, userId) {
+  return selectFile.get(id, userId);
 }
 
 export function saveSettings(userId, settings) {
@@ -200,7 +246,7 @@ export function saveSettings(userId, settings) {
       ? Math.min(2, Math.max(0, Number(settings.temperature)))
       : 0.7,
     systemPrompt: String(settings.systemPrompt || '').slice(0, 2000),
-    apiKey: String(settings.apiKey || '').slice(0, 400),
+    apiKey: encryptSecret(String(settings.apiKey || '').slice(0, 400)),
     updatedAt: Date.now(),
   });
   return getRawSettings(userId);
