@@ -5,6 +5,7 @@ node_modules
 dist
 
 data/
+backups/
 *.db
 *.db-shm
 *.db-wal
