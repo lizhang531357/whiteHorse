@@ -1,0 +1,106 @@
+@import '../../styles/theme.less';
+
+.collapsedBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 8px;
+
+  :global(.ant-btn) {
+    color: @text-soft;
+  }
+}
+
+.conversationList {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-top: 10px;
+
+  .newChat {
+    flex-shrink: 0;
+    width: 100%;
+    color: @text;
+    background: transparent;
+    border-color: @border;
+  }
+
+  .list {
+    flex: 1;
+    min-height: 0;
+    margin: 10px -4px 0;
+    padding: 0 4px;
+    overflow-y: auto;
+  }
+
+  .empty {
+    margin-top: 32px;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    color: @text;
+    font-size: 13px;
+    border-radius: 8px;
+    cursor: pointer;
+
+    &:hover {
+      background: @hover;
+    }
+
+    &.active {
+      background: @accent-weak;
+    }
+
+    .itemIcon {
+      flex-shrink: 0;
+      color: @text-soft;
+      font-size: 13px;
+    }
+
+    .title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .time {
+      flex-shrink: 0;
+      color: @text-soft;
+      font-size: 11px;
+    }
+
+    .more {
+      display: none;
+      flex-shrink: 0;
+      color: @text-soft;
+      cursor: pointer;
+
+      &:hover {
+        color: @text;
+      }
+    }
+
+    &:hover .more {
+      display: inline-flex;
+    }
+
+    &:hover .time {
+      display: none;
+    }
+  }
+
+  .clear {
+    flex-shrink: 0;
+    align-self: center;
+    margin-top: 6px;
+    color: @text-soft;
+  }
+}

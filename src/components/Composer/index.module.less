@@ -1,0 +1,128 @@
+@import '../../styles/theme.less';
+
+.composerSection {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+
+  &.dragging {
+    .composer {
+      border-color: @accent;
+    }
+  }
+
+  .dropHint {
+    position: absolute;
+    inset: -8px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: @accent;
+    font-size: 14px;
+    background: @accent-weak;
+    border: 2px dashed @accent;
+    border-radius: 20px;
+    pointer-events: none;
+  }
+
+  .thumb {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
+  .pendingFiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .fileChip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 240px;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: @text-soft;
+      background: @chip-bg;
+      border: 1px solid @chip-border;
+      border-radius: 8px;
+
+      .fileIcon {
+        color: @accent;
+      }
+
+      .fileName {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .fileRemove {
+        color: @text-soft;
+        cursor: pointer;
+
+        &:hover {
+          color: @danger;
+        }
+      }
+    }
+  }
+
+  .composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 6px 8px;
+    background: @input-bg;
+    border: 1px solid @border;
+    border-radius: 24px;
+    box-shadow: 0 2px 8px @shadow;
+
+    &:focus-within {
+      border-color: @accent;
+    }
+
+    .iconBtn {
+      flex-shrink: 0;
+      color: @text-soft;
+
+      &:hover {
+        color: @text;
+      }
+    }
+
+    .listening {
+      color: @danger;
+      animation: pulse 1s infinite;
+    }
+
+    .input {
+      flex: 1;
+      padding: 6px 0;
+      color: @text;
+      font-size: 15px;
+      line-height: 1.6;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      resize: none;
+
+      &:focus {
+        box-shadow: none;
+      }
+    }
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}

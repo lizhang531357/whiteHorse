@@ -1,0 +1,413 @@
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useAuthContext } from './AuthContext'
+import { useConversations } from '../hooks/useConversations'
+import { useSettings } from '../hooks/useSettings'
+import { useTheme } from '../hooks/useTheme'
+import { deriveTitle } from '../utils/title'
+import { filesToPayload } from '../utils/file'
+import { uid } from '../utils/id'
+import { consumeSSE, requestChat } from '../utils/stream'
+import { loadJSON, saveJSON } from '../utils/storage'
+
+const ChatContext = createContext(null)
+
+const HISTORY_LIMIT = 30
+
+function toHistory(messages = []) {
+  return messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter((m) => m.role === 'assistant' ? Boolean(m.content) : Boolean(m.content || m.promptContent))
+    .slice(-HISTORY_LIMIT)
+    .map((m) => ({
+      role: m.role,
+      content: m.role === 'user' ? m.promptContent || m.content : m.content,
+    }))
+}
+
+export function ChatProvider({ children }) {
+  const { user } = useAuthContext()
+  const {
+    settings,
+    updateSettings,
+    resetSettings,
+    loading: settingsLoading,
+    hasApiKey,
+    apiKeyMasked,
+    saveApiKey,
+    clearApiKey,
+  } = useSettings(user.id)
+  const themeState = useTheme()
+  const store = useConversations(user.id)
+  const {
+    current,
+    currentId,
+    conversationsRef,
+    createConversation,
+    renameConversation,
+    appendMessages,
+    patchMessage,
+    deleteMessage,
+    truncateFrom,
+    truncateAfter,
+    touchConversation,
+  } = store
+
+  const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
+  const abortRef = useRef(null)
+
+  const draftsKey = `baima:drafts:${user.id}`
+  const textDraftsRef = useRef(loadJSON(draftsKey, {}))
+  const fileDraftsRef = useRef(new Map())
+  const draftSaveTimerRef = useRef(null)
+
+  const scheduleSaveDrafts = useCallback(() => {
+    if (draftSaveTimerRef.current) return
+    draftSaveTimerRef.current = setTimeout(() => {
+      draftSaveTimerRef.current = null
+      saveJSON(draftsKey, textDraftsRef.current)
+    }, 300)
+  }, [draftsKey])
+
+  const getDraft = useCallback((key) => {
+    const id = key || 'new'
+    return {
+      text: textDraftsRef.current[id] || '',
+      files: fileDraftsRef.current.get(id) || [],
+    }
+  }, [])
+
+  const setDraft = useCallback(
+    (key, draft) => {
+      const id = key || 'new'
+      if (draft.files) fileDraftsRef.current.set(id, draft.files)
+      const text = draft.text || ''
+      if (textDraftsRef.current[id] !== text) {
+        if (text) textDraftsRef.current[id] = text
+        else delete textDraftsRef.current[id]
+        scheduleSaveDrafts()
+      }
+    },
+    [scheduleSaveDrafts],
+  )
+
+  const clearDraft = useCallback(
+    (key) => {
+      const id = key || 'new'
+      fileDraftsRef.current.delete(id)
+      delete textDraftsRef.current[id]
+      scheduleSaveDrafts()
+    },
+    [scheduleSaveDrafts],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
+    }
+  }, [])
+
+  const setBusy = useCallback((value) => {
+    loadingRef.current = value
+    setLoading(value)
+  }, [])
+
+  useEffect(() => {
+    return () => abortRef.current?.abort()
+  }, [])
+
+  const startAssistant = useCallback(
+    async ({ convId, history, message, attachments = [], userMsgId }) => {
+      const controller = new AbortController()
+      abortRef.current = controller
+      setBusy(true)
+
+      const aiId = uid('msg')
+      appendMessages(convId, [
+        {
+          id: aiId,
+          role: 'assistant',
+          content: '',
+          reasoning: '',
+          createdAt: Date.now(),
+          status: 'streaming',
+        },
+      ])
+
+      let content = ''
+      let reasoning = ''
+      let streamError = ''
+      let rafId = null
+
+      const flush = (patch) => patchMessage(convId, aiId, patch)
+      const scheduleFlush = () => {
+        if (rafId != null) return
+        rafId = requestAnimationFrame(() => {
+          rafId = null
+          flush({ content, reasoning })
+        })
+      }
+
+      try {
+        const res = await requestChat(
+          { message, attachments, history, settings },
+          controller.signal,
+        )
+        const contentType = res.headers.get('content-type') || ''
+
+        if (contentType.includes('application/json')) {
+          let data = null
+          try {
+            data = await res.json()
+          } catch {
+            data = null
+          }
+          deleteMessage(convId, aiId)
+          appendMessages(convId, [
+            { id: uid('msg'), role: 'error', content: data?.error || '请求失败', createdAt: Date.now() },
+          ])
+          return
+        }
+
+        if (!res.ok || !res.body) throw new Error('服务端未返回流式内容')
+
+        await consumeSSE(res, {
+          onPrompt: (text) => {
+            if (userMsgId) patchMessage(convId, userMsgId, { promptContent: text })
+          },
+          onReasoning: (delta) => {
+            reasoning += delta
+            scheduleFlush()
+          },
+          onDelta: (delta) => {
+            content += delta
+            scheduleFlush()
+          },
+          onError: (msg) => {
+            streamError = msg
+          },
+        })
+
+        if (rafId != null) {
+          cancelAnimationFrame(rafId)
+          rafId = null
+        }
+
+        if (streamError) {
+          if (content || reasoning) {
+            flush({ content, reasoning, status: 'error', error: streamError })
+          } else {
+            deleteMessage(convId, aiId)
+            appendMessages(convId, [
+              { id: uid('msg'), role: 'error', content: streamError, createdAt: Date.now() },
+            ])
+          }
+          return
+        }
+
+        if (!content && !reasoning) {
+          deleteMessage(convId, aiId)
+          appendMessages(convId, [
+            {
+              id: uid('msg'),
+              role: 'error',
+              content: '模型没有返回内容，请稍后重试',
+              createdAt: Date.now(),
+            },
+          ])
+          return
+        }
+
+        flush({ content, reasoning, status: 'done' })
+      } catch (err) {
+        if (err.name === 'AbortError' || controller.signal.aborted) {
+          if (content || reasoning) flush({ content, reasoning, status: 'done' })
+          else deleteMessage(convId, aiId)
+          return
+        }
+
+        if (content || reasoning) {
+          flush({ content, reasoning, status: 'error', error: '生成中断：' + err.message })
+        } else {
+          deleteMessage(convId, aiId)
+          appendMessages(convId, [
+            {
+              id: uid('msg'),
+              role: 'error',
+              content: '请求失败：' + err.message,
+              createdAt: Date.now(),
+            },
+          ])
+        }
+      } finally {
+        if (rafId != null) cancelAnimationFrame(rafId)
+        if (abortRef.current === controller) abortRef.current = null
+        setBusy(false)
+        touchConversation(convId)
+      }
+    },
+    [appendMessages, deleteMessage, patchMessage, setBusy, settings, touchConversation],
+  )
+
+  const sendMessage = useCallback(
+    async ({ text, files = [] }) => {
+      if (loadingRef.current) return
+      const trimmed = String(text || '').trim()
+      if (!trimmed && files.length === 0) return
+
+      let convId = currentId
+      let history = []
+      const existing = convId ? conversationsRef.current.find((c) => c.id === convId) : null
+
+      if (!existing) {
+        convId = createConversation(deriveTitle(trimmed, files))
+      } else {
+        history = toHistory(existing.messages)
+        if (!existing.messages.length) {
+          renameConversation(convId, deriveTitle(trimmed, files))
+        }
+      }
+
+      const userMessage = {
+        id: uid('msg'),
+        role: 'user',
+        content: trimmed,
+        files: files.map((f) => ({
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          preview: f.preview || '',
+        })),
+        createdAt: Date.now(),
+      }
+      appendMessages(convId, [userMessage])
+
+      let attachments = []
+      if (files.length) {
+        try {
+          attachments = await filesToPayload(files)
+        } catch (err) {
+          appendMessages(convId, [
+            {
+              id: uid('msg'),
+              role: 'error',
+              content: '附件读取失败：' + err.message,
+              createdAt: Date.now(),
+            },
+          ])
+          return
+        }
+      }
+
+      await startAssistant({
+        convId,
+        history,
+        message: trimmed,
+        attachments,
+        userMsgId: userMessage.id,
+      })
+    },
+    [
+      appendMessages,
+      conversationsRef,
+      createConversation,
+      currentId,
+      renameConversation,
+      startAssistant,
+    ],
+  )
+
+  const regenerate = useCallback(
+    async (messageId) => {
+      if (loadingRef.current) return
+      const conv = conversationsRef.current.find((c) => c.id === current?.id)
+      if (!conv) return
+
+      const index = conv.messages.findIndex((m) => m.id === messageId)
+      if (index < 0) return
+
+      const before = conv.messages.slice(0, index)
+      let userIndex = -1
+      for (let i = before.length - 1; i >= 0; i -= 1) {
+        if (before[i].role === 'user') {
+          userIndex = i
+          break
+        }
+      }
+      if (userIndex < 0) return
+
+      const lastUser = before[userIndex]
+      const history = toHistory(before.slice(0, userIndex))
+      truncateFrom(conv.id, messageId)
+      await startAssistant({
+        convId: conv.id,
+        history,
+        message: lastUser.promptContent || lastUser.content,
+        attachments: [],
+        userMsgId: lastUser.id,
+      })
+    },
+    [conversationsRef, current?.id, startAssistant, truncateFrom],
+  )
+
+  const editMessage = useCallback(
+    async (messageId, nextContent) => {
+      if (loadingRef.current) return
+      const text = String(nextContent || '').trim()
+      if (!text) return
+
+      const conv = conversationsRef.current.find((c) => c.id === current?.id)
+      if (!conv) return
+
+      const index = conv.messages.findIndex((m) => m.id === messageId)
+      if (index < 0 || conv.messages[index].role !== 'user') return
+
+      const history = toHistory(conv.messages.slice(0, index))
+      patchMessage(conv.id, messageId, { content: text, promptContent: undefined })
+      truncateAfter(conv.id, messageId)
+      await startAssistant({
+        convId: conv.id,
+        history,
+        message: text,
+        attachments: [],
+        userMsgId: messageId,
+      })
+    },
+    [conversationsRef, current?.id, patchMessage, startAssistant, truncateAfter],
+  )
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
+
+  const value = {
+    user,
+    settings,
+    updateSettings,
+    resetSettings,
+    settingsLoading,
+    hasApiKey,
+    apiKeyMasked,
+    saveApiKey,
+    clearApiKey,
+    ...themeState,
+    ...store,
+    current,
+    loading,
+    sendMessage,
+    regenerate,
+    editMessage,
+    stop,
+    getDraft,
+    setDraft,
+    clearDraft,
+  }
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+}
+
+export function useChatContext() {
+  const ctx = useContext(ChatContext)
+  if (!ctx) throw new Error('useChatContext 必须在 ChatProvider 内使用')
+  return ctx
+}

@@ -1,0 +1,132 @@
+@import '../../styles/theme.less';
+
+.tabs {
+  :global(.ant-tabs-nav) {
+    min-width: 104px;
+  }
+
+  :global(.ant-tabs-tab) {
+    padding: 8px 14px;
+    text-align: left;
+  }
+
+  :global(.ant-tabs-content-holder) {
+    min-height: 360px;
+    padding-left: 8px;
+  }
+
+  :global(.ant-tabs-tabpane) {
+    padding-left: 4px;
+  }
+}
+
+.profileTab {
+  padding-top: 4px;
+
+  .profile {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .profileInfo {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .name {
+    font-size: 18px;
+    font-weight: 600;
+    color: @text;
+  }
+
+  .email {
+    margin-top: 2px;
+    font-size: 13px;
+    color: @text-soft;
+  }
+
+  .editBtn {
+    height: auto;
+    padding: 4px 0 0;
+  }
+
+  .editForm {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .editActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .logoutBtn {
+    margin-top: 24px;
+  }
+}
+
+.systemTab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 4px;
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: @text;
+  }
+
+  .value {
+    color: @accent;
+    font-weight: 400;
+  }
+
+  .savedTag {
+    padding: 0 6px;
+    color: @accent;
+    font-size: 11px;
+    font-weight: 400;
+    background: @accent-weak;
+    border-radius: 4px;
+  }
+
+  .hintIcon {
+    color: @text-soft;
+    cursor: help;
+  }
+
+  .keyRow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    :global(.ant-input-affix-wrapper) {
+      flex: 1;
+    }
+  }
+
+  .hint {
+    color: @text-soft;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .configFooter {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 4px;
+  }
+}
