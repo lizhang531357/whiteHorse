@@ -57,7 +57,7 @@ yarn backup   # 生成 backups/baima-时间.db、加密密钥和附件目录
 ## 目录结构
 
 ```
-ai-react/
+whiteHorse/
 ├── index.html              入口 HTML
 ├── vite.config.js          开发服务器 + /api 代理 + 打包分包
 ├── tsconfig.json           TypeScript 配置
