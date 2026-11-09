@@ -2,7 +2,6 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { message } from 'antd'
-import { CheckOutlined, CopyOutlined } from '@ant-design/icons'
 import { useState } from 'react'
 import 'highlight.js/styles/github-dark.css'
 import styles from './index.module.less'
@@ -38,7 +37,6 @@ const CodeBlock = ({ node, children, ...props }) => {
       <div className={styles.codeHeader}>
         <span className={styles.codeLang}>{lang}</span>
         <button type="button" className={styles.copyBtn} onClick={handleCopy}>
-          {copied ? <CheckOutlined /> : <CopyOutlined />}
           <span>{copied ? '已复制' : '复制'}</span>
         </button>
       </div>

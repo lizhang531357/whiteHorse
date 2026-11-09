@@ -1,9 +1,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { THEME } from './theme.config.js'
 
 // 前端开发服务器把 /api 请求转发给 Node 后端（这样 key 不用进前端）
 export default defineConfig({
   plugins: [react()],
+  css: {
+    preprocessorOptions: {
+      less: {
+        javascriptEnabled: true,
+        // 把主题色注入到所有 less（供 global.less 等自定义样式使用）
+        additionalData: `@theme-accent: ${THEME.accent};\n@theme-accent-dark: ${THEME.accentDark};\n`,
+        // 统一 antd v4 主题色（构建期 less 变量）
+        modifyVars: {
+          '@primary-color': THEME.accent,
+          '@processing-color': THEME.accent,
+        },
+      },
+    },
+  },
   server: {
     port: 3000,
     strictPort: true,

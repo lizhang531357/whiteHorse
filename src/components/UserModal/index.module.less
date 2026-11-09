@@ -1,60 +1,301 @@
 @import '../../styles/theme.less';
 
-.tabs {
-  :global(.ant-tabs-nav) {
-    min-width: 104px;
+.settings {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 180px;
+  background: @sider-bg;
+  border-right: 1px solid @border;
+
+  .brand {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    height: 56px;
+    padding: 0 18px;
+    color: @text;
+    font-size: 16px;
+    font-weight: 600;
+    border-bottom: 1px solid @border;
   }
 
-  :global(.ant-tabs-tab) {
-    padding: 8px 14px;
-    text-align: left;
+  :global(.ant-menu) {
+    flex: 1;
+    padding: 8px;
+    background: transparent;
+    border-right: none;
   }
 
-  :global(.ant-tabs-content-holder) {
-    min-height: 360px;
-    padding-left: 8px;
+  :global(.ant-menu-item) {
+    height: 38px;
+    margin: 2px 0;
+    line-height: 38px;
+    border-radius: 8px;
   }
 
-  :global(.ant-tabs-tabpane) {
-    padding-left: 4px;
+  :global(.ant-menu-item-selected) {
+    color: @accent;
+    background: @accent-weak;
+  }
+
+  :global(.ant-menu-item-selected::after) {
+    display: none;
   }
 }
 
-.profileTab {
-  padding-top: 4px;
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: @bg;
 
-  .profile {
+  .mainHeader {
     display: flex;
-    gap: 14px;
-    align-items: flex-start;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    height: 56px;
+    padding: 0 24px;
+    border-bottom: 1px solid @border;
   }
 
-  .profileInfo {
+  .mainBody {
     flex: 1;
+    min-height: 0;
+    padding: 0 24px;
+    overflow-y: auto;
+  }
+
+  .mainFooter {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    padding: 12px 24px;
+    background: @bg;
+    border-top: 1px solid @border;
+  }
+}
+
+.general,
+.model,
+.data,
+.account {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  min-height: 54px;
+  padding: 12px 0;
+  border-bottom: 1px solid @border;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.rowInput .rowLabel {
+    padding-top: 5px;
+  }
+
+  .rowLabel {
+    display: flex;
+    flex: 0 0 120px;
+    align-items: center;
+    gap: 8px;
+    color: @text;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  .rowControl {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
     min-width: 0;
   }
 
-  .name {
-    font-size: 18px;
-    font-weight: 600;
-    color: @text;
+  .controlCol {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    width: 100%;
+    max-width: 360px;
+    min-width: 0;
+
+    :global(.ant-input-affix-wrapper),
+    :global(.ant-input) {
+      width: 100%;
+    }
+
+    :global(.ant-slider) {
+      width: 100%;
+      margin-right: 0;
+      margin-left: 0;
+    }
   }
 
-  .email {
-    margin-top: 2px;
-    font-size: 13px;
+  .rowValue {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: @text-soft;
+    font-size: 14px;
+
+    :global(.ant-btn-link) {
+      height: auto;
+      padding: 0;
+    }
+  }
+}
+
+.hint {
+  width: 100%;
+  color: @text-soft;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.muted {
+  color: @text-soft;
+}
+
+.value {
+  color: @accent;
+  font-weight: 400;
+}
+
+.themeToggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: @surface-weak;
+  border: 1px solid @border;
+  border-radius: 10px;
+
+  :global(.ant-radio-button-wrapper) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    margin: 0;
+    padding: 0 14px;
+    color: @text-soft;
+    font-size: 13px;
+    line-height: 26px;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    box-shadow: none;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+
+    &::before {
+      display: none !important;
+    }
+
+    &:hover {
+      color: @text;
+    }
   }
 
-  .editBtn {
-    height: auto;
-    padding: 4px 0 0;
+  :global(.ant-radio-button-wrapper:first-child),
+  :global(.ant-radio-button-wrapper:last-child) {
+    border: none;
+    border-radius: 7px;
   }
+
+  :global(.ant-radio-button-wrapper:focus-within) {
+    box-shadow: none;
+  }
+
+  :global(.ant-radio-button-wrapper.ant-radio-button-wrapper-checked),
+  :global(.ant-radio-button-wrapper.ant-radio-button-wrapper-checked:focus-within),
+  :global(.ant-radio-button-wrapper.ant-radio-button-wrapper-checked:hover) {
+    color: @bg;
+    font-weight: 500;
+    background: @accent;
+    border: none;
+    box-shadow: 0 2px 6px @shadow;
+  }
+}
+
+.savedTag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  color: @accent;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+  background: @accent-weak;
+  border-radius: 4px;
+}
+
+.actionButton {
+  border-radius: 8px;
+}
+
+.hintIcon {
+  color: @text-soft;
+  cursor: help;
+}
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+
+  :global(.ant-input-affix-wrapper) {
+    flex: 1;
+  }
+}
+
+.keyActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.block {
+  padding: 12px 0;
+  border-bottom: 1px solid @border;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .blockLabel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    color: @text;
+    font-size: 14px;
+  }
+}
+
+.editBox {
+  padding: 12px 0 12px 144px;
+  border-bottom: 1px solid @border;
 
   .editForm {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    max-width: 360px;
   }
 
   .editActions {
@@ -62,71 +303,86 @@
     justify-content: flex-end;
     gap: 8px;
   }
+}
 
-  .logoutBtn {
-    margin-top: 24px;
+.passwordForm {
+  max-width: 360px;
+
+  :global(.ant-form-item) {
+    margin-bottom: 12px;
   }
 }
 
-.systemTab {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding-top: 4px;
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .label {
+.data {
+  .dataRow {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    color: @text;
-  }
+    justify-content: space-between;
+    gap: 24px;
+    padding: 12px 0;
+    border-bottom: 1px solid @border;
 
-  .value {
-    color: @accent;
-    font-weight: 400;
-  }
-
-  .savedTag {
-    padding: 0 6px;
-    color: @accent;
-    font-size: 11px;
-    font-weight: 400;
-    background: @accent-weak;
-    border-radius: 4px;
-  }
-
-  .hintIcon {
-    color: @text-soft;
-    cursor: help;
-  }
-
-  .keyRow {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-
-    :global(.ant-input-affix-wrapper) {
-      flex: 1;
+    &:last-child {
+      border-bottom: none;
     }
   }
 
-  .hint {
+  .dataText {
+    min-width: 0;
     color: @text-soft;
     font-size: 12px;
     line-height: 1.6;
   }
 
-  .configFooter {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 4px;
+  .dataTitle {
+    display: block;
+    margin-bottom: 2px;
+    color: @text;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .dataDesc {
+    display: block;
+    color: @text-soft;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 132px;
+
+    .brand {
+      padding: 0 12px;
+      font-size: 14px;
+    }
+
+    :global(.ant-menu-item) {
+      padding: 0 10px !important;
+      font-size: 13px;
+    }
+  }
+
+  .main {
+    .mainHeader {
+      padding: 0 14px;
+    }
+
+    .mainBody {
+      padding: 0 14px;
+    }
+  }
+
+  .row {
+    gap: 12px;
+
+    .rowLabel {
+      flex-basis: 96px;
+      font-size: 13px;
+    }
+  }
+
+  .editBox {
+    padding-left: 0;
   }
 }

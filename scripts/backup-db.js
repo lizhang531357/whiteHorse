@@ -1,3 +1,9 @@
+/**
+ * 数据备份脚本
+ * 备份 data/baima.db、data/.settings-key、data/uploads 到 backups/（文件名带时间戳）。
+ * 用法：yarn backup
+ * 备份含加密密钥，请勿上传到公开仓库或网盘。
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

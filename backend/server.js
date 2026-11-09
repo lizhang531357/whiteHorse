@@ -19,25 +19,40 @@ import {
   saveSettings,
   createFileRecord,
   getFileRecord,
+  savePasswordReset,
+  getPasswordReset,
+  deletePasswordReset,
+  incrementPasswordResetAttempts,
+  updateUserPassword,
+  deleteUserSessions,
+  deleteUser,
+  deleteAllConversations,
+  deleteAllFiles,
   cleanupSessions,
-} from './server/db.js';
+} from './db.js';
 import {
   hashPassword,
   verifyPassword,
   createToken,
+  createSalt,
+  createResetCode,
+  hashResetCode,
+  verifyResetCode,
   getSessionToken,
   getAuthUser,
   setSessionCookie,
   clearSessionCookie,
   SESSION_TTL_MS,
-} from './server/auth.js';
+} from './auth.js';
+import { isMailConfigured, sendResetCode } from './mailer.js';
 
 const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
 const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const PORT = process.env.PORT || 3001;
 const ALLOW_REGISTER = process.env.ALLOW_REGISTER !== 'false';
 
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
+// 项目根目录（backend 的上一级），dist/data 等仍位于根目录
+const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(rootDir, 'dist');
 const dataRoot = process.env.DATA_DIR || path.join(rootDir, 'data');
 const uploadsDir = path.join(dataRoot, 'uploads');
@@ -488,6 +503,7 @@ function settingsView(userId) {
   const settings = getRawSettings(userId);
   return {
     model: settings.model || '',
+    baseUrl: settings.base_url || '',
     temperature: settings.temperature ?? 0.7,
     systemPrompt: settings.system_prompt || '',
     hasApiKey: Boolean(settings.api_key),
@@ -585,6 +601,104 @@ async function handleProfile(req, res) {
   sendJson(res, 200, { user: publicUser(updated) });
 }
 
+async function handleChangePassword(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const currentPassword = String(body.currentPassword || '');
+  const newPassword = String(body.newPassword || '');
+
+  if (!verifyPassword(currentPassword, user.password_hash)) {
+    return sendError(res, 400, '当前密码不正确', { field: 'currentPassword' });
+  }
+  if (newPassword.length < 6) {
+    return sendError(res, 400, '新密码至少 6 位', { field: 'newPassword' });
+  }
+  if (newPassword === currentPassword) {
+    return sendError(res, 400, '新密码不能与当前密码相同', { field: 'newPassword' });
+  }
+
+  updateUserPassword(user.id, hashPassword(newPassword));
+  // 其它设备上的登录失效，当前设备保持登录
+  deleteUserSessions(user.id, getSessionToken(req));
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleForgotPassword(req, res) {
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const email = String(body.email || '').trim().toLowerCase();
+  if (!email) return sendError(res, 400, '请输入邮箱', { field: 'email' });
+
+  const user = getUserByEmail(email);
+  const mailReady = isMailConfigured();
+
+  if (!user) {
+    // 邮箱不存在也返回相同结构，避免暴露账号是否存在（终端留一条记录便于管理员排查）
+    console.log(`[reset] 未注册邮箱请求：${email}`);
+    return sendJson(res, 200, { ok: true, mailSent: mailReady });
+  }
+
+  const code = createResetCode();
+  const salt = createSalt();
+  savePasswordReset(user.id, hashResetCode(code, salt), salt, Date.now() + 10 * 60 * 1000);
+
+  let sent = false;
+  try {
+    sent = await sendResetCode(email, code);
+  } catch (err) {
+    console.error('[reset] 邮件发送失败：', err.message);
+  }
+
+  if (!sent) {
+    console.log(`[reset] ${email} 的验证码：${code}（10 分钟内有效）`);
+  }
+
+  sendJson(res, 200, { ok: true, mailSent: sent });
+}
+
+async function handleResetPassword(req, res) {
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const email = String(body.email || '').trim().toLowerCase();
+  const code = String(body.code || '').trim();
+  const newPassword = String(body.newPassword || '');
+
+  if (!email) return sendError(res, 400, '请输入邮箱', { field: 'email' });
+  if (!/^\d{6}$/.test(code)) return sendError(res, 400, '请输入 6 位验证码', { field: 'code' });
+  if (newPassword.length < 6) {
+    return sendError(res, 400, '新密码至少 6 位', { field: 'newPassword' });
+  }
+
+  const user = getUserByEmail(email);
+  const reset = user ? getPasswordReset(user.id) : null;
+  const invalid = () => sendError(res, 400, '验证码错误或已过期', { field: 'code' });
+
+  if (!user || !reset) return invalid();
+  if (reset.expires_at <= Date.now()) {
+    deletePasswordReset(user.id);
+    return invalid();
+  }
+  if (reset.attempts >= 5) {
+    deletePasswordReset(user.id);
+    return invalid();
+  }
+  if (!verifyResetCode(code, reset.salt, reset.code_hash)) {
+    incrementPasswordResetAttempts(user.id);
+    return invalid();
+  }
+
+  updateUserPassword(user.id, hashPassword(newPassword));
+  deletePasswordReset(user.id);
+  deleteUserSessions(user.id);
+  sendJson(res, 200, { ok: true });
+}
+
 function handleGetSettings(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -606,8 +720,23 @@ async function handlePutSettings(req, res) {
     apiKey = body.apiKey.trim();
   }
 
+  let baseUrl =
+    typeof body.baseUrl === 'string' ? body.baseUrl.trim().slice(0, 300) : current.base_url || '';
+  if (baseUrl) {
+    try {
+      const parsed = new URL(baseUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('protocol');
+      }
+      baseUrl = baseUrl.replace(/\/+$/, '');
+    } catch {
+      return sendError(res, 400, 'BASE_URL 必须是 http/https 地址', { field: 'baseUrl' });
+    }
+  }
+
   saveSettings(user.id, {
     model: typeof body.model === 'string' ? body.model : current.model,
+    baseUrl,
     temperature:
       body.temperature === undefined ? current.temperature : Number(body.temperature),
     systemPrompt:
@@ -616,6 +745,77 @@ async function handlePutSettings(req, res) {
   });
 
   sendJson(res, 200, settingsView(user.id));
+}
+
+function handleRevealApiKey(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const settings = getRawSettings(user.id);
+  if (!settings.api_key) return sendError(res, 404, '还没有配置 API Key');
+
+  res.setHeader('Cache-Control', 'no-store');
+  sendJson(res, 200, { apiKey: settings.api_key });
+}
+
+function handleDeleteAllConversations(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  deleteAllConversations(user.id);
+  deleteAllFiles(user.id);
+  try {
+    fs.rmSync(path.join(uploadsDir, user.id), { recursive: true, force: true });
+  } catch {
+    // 附件目录可能不存在
+  }
+
+  sendJson(res, 200, { ok: true });
+}
+
+function handleDeleteAccount(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  try {
+    fs.rmSync(path.join(uploadsDir, user.id), { recursive: true, force: true });
+  } catch {
+    // 附件目录可能不存在
+  }
+
+  deleteUser(user.id);
+  clearSessionCookie(res);
+  sendJson(res, 200, { ok: true });
+}
+
+function getPublicUrl(req) {
+  const configured = String(process.env.PUBLIC_URL || '').trim()
+  if (configured) return configured
+
+  try {
+    const file = path.join(dataRoot, 'public-url.txt')
+    if (fs.existsSync(file)) {
+      const value = fs.readFileSync(file, 'utf8').trim()
+      if (/^https?:\/\//i.test(value)) return value
+    }
+  } catch {
+    // 忽略读取失败
+  }
+
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+  if (host && !/^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?$/i.test(host)) {
+    const proto = String(
+      req.headers['x-forwarded-proto'] || (req.headers['cf-connecting-ip'] ? 'https' : 'http'),
+    )
+    return `${proto}://${host}`
+  }
+
+  return ''
+}
+
+function handleShare(req, res) {
+  const url = getPublicUrl(req)
+  sendJson(res, 200, { url, available: Boolean(url) })
 }
 
 function handleExport(req, res) {
@@ -681,6 +881,7 @@ async function handleTitle(req, res) {
   const apiKey = (settings.api_key || '').trim();
   if (!apiKey) return sendError(res, 400, '未配置 API Key');
 
+  const baseUrl = (settings.base_url || BASE_URL).replace(/\/+$/, '');
   const model = settings.model || MODEL;
   const isReasoner = /reasoner/i.test(model);
   const messages = isReasoner
@@ -701,7 +902,7 @@ async function handleTitle(req, res) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
-    const upstream = await fetch(`${BASE_URL}/chat/completions`, {
+    const upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -771,9 +972,10 @@ async function handleChat(req, res) {
   }
 
   const rawSettings = getRawSettings(authUser.id);
+  const baseUrl = (rawSettings.base_url || BASE_URL).replace(/\/+$/, '');
   const apiKey = (rawSettings.api_key || '').trim();
   if (!apiKey) {
-    sendError(res, 400, '请先在「我的 - 系统配置」里填写 API Key');
+    sendError(res, 400, '请先在「我的 - 通用设置」里填写 API Key');
     return;
   }
 
@@ -892,7 +1094,7 @@ async function handleChat(req, res) {
 
   let upstream;
   try {
-    upstream = await fetch(`${BASE_URL}/chat/completions`, {
+    upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1029,6 +1231,12 @@ const server = http.createServer(async (req, res) => {
       } else if (pathname === '/api/auth/register') {
         allowed = checkRate(`register:${ip}`, 5, 60 * 60 * 1000);
         if (!allowed) return rateLimited(res, 3600);
+      } else if (pathname === '/api/auth/forgot') {
+        allowed = checkRate(`forgot:${ip}`, 5, 15 * 60 * 1000);
+        if (!allowed) return rateLimited(res, 900);
+      } else if (pathname === '/api/auth/reset') {
+        allowed = checkRate(`reset:${ip}`, 10, 15 * 60 * 1000);
+        if (!allowed) return rateLimited(res, 900);
       } else if (pathname === '/api/chat') {
         allowed = checkRate(`chat:${ip}`, 30, 60 * 1000);
         if (!allowed) return rateLimited(res, 60);
@@ -1041,6 +1249,7 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/config') {
       sendJson(res, 200, {
         defaultModel: MODEL,
+        defaultBaseUrl: BASE_URL,
         allowRegister: ALLOW_REGISTER,
         maxFiles: 5,
         maxFileSize: MAX_FILE_BYTES,
@@ -1053,8 +1262,13 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && pathname === '/api/auth/logout') return handleLogout(req, res);
     if (method === 'GET' && pathname === '/api/auth/me') return handleMe(req, res);
     if (method === 'PUT' && pathname === '/api/auth/profile') return await handleProfile(req, res);
+    if (method === 'PUT' && pathname === '/api/auth/password') return await handleChangePassword(req, res);
+    if (method === 'DELETE' && pathname === '/api/auth/account') return handleDeleteAccount(req, res);
+    if (method === 'POST' && pathname === '/api/auth/forgot') return await handleForgotPassword(req, res);
+    if (method === 'POST' && pathname === '/api/auth/reset') return await handleResetPassword(req, res);
 
     if (method === 'GET' && pathname === '/api/settings') return handleGetSettings(req, res);
+    if (method === 'GET' && pathname === '/api/settings/api-key') return handleRevealApiKey(req, res);
     if (method === 'PUT' && pathname === '/api/settings') return await handlePutSettings(req, res);
 
     if (method === 'POST' && pathname === '/api/title') return await handleTitle(req, res);
@@ -1063,8 +1277,12 @@ const server = http.createServer(async (req, res) => {
       return handleFileDownload(req, res, fileId);
     }
 
+    if (method === 'GET' && pathname === '/api/share') return handleShare(req, res);
     if (method === 'GET' && pathname === '/api/export') return handleExport(req, res);
     if (method === 'GET' && pathname === '/api/conversations') return handleGetConversations(req, res);
+    if (method === 'DELETE' && pathname === '/api/conversations') {
+      return handleDeleteAllConversations(req, res);
+    }
     if (method === 'POST' && pathname === '/api/conversations/sync') {
       return await handleSyncConversations(req, res);
     }

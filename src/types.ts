@@ -48,6 +48,7 @@ export interface User {
 
 export interface Settings {
   model: string
+  baseUrl: string
   temperature: number
   systemPrompt: string
 }

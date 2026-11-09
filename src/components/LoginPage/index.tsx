@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Button, Form, Input, Tabs, message } from 'antd'
 import { LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons'
+import ShareModal from '../ShareModal'
+import ForgotPasswordModal from '../ForgotPasswordModal'
 import { useAuthContext } from '../../context/AuthContext'
 import styles from './index.module.less'
 
@@ -10,6 +12,8 @@ const LoginPage = () => {
   const [tab, setTab] = useState('login')
   const [submitting, setSubmitting] = useState(false)
   const [allowRegister, setAllowRegister] = useState(true)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [forgotOpen, setForgotOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -126,6 +130,12 @@ const LoginPage = () => {
             />
           </Form.Item>
 
+          <div className={styles.forgotRow}>
+            <Button type="link" size="small" onClick={() => setForgotOpen(true)}>
+              忘记密码？
+            </Button>
+          </div>
+
           <Button type="primary" size="large" block htmlType="submit" loading={submitting}>
             {tab === 'login' ? '登录' : '注册并登录'}
           </Button>
@@ -138,7 +148,25 @@ const LoginPage = () => {
               ? '还没有账号？切到「注册」创建'
               : '注册成功后会自动登录'}
         </p>
+
+        <div className={styles.shareRow}>
+          <Button type="link" onClick={() => setShareOpen(true)}>
+            分享访问链接
+          </Button>
+        </div>
       </div>
+
+      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
+
+      <ForgotPasswordModal
+        open={forgotOpen}
+        onClose={() => setForgotOpen(false)}
+        onSuccess={(email) => {
+          switchTab('login')
+          form.setFieldsValue({ email })
+          setForgotOpen(false)
+        }}
+      />
     </div>
   )
 }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Modal } from 'antd'
-import { DownOutlined } from '@ant-design/icons'
+import { Button, Modal, Tooltip } from 'antd'
+import { DownOutlined, ShareAltOutlined } from '@ant-design/icons'
 import Composer from '../../components/Composer'
 import MessageItem from '../../components/MessageItem'
+import ShareModal from '../../components/ShareModal'
 import { useChatContext } from '../../context/ChatContext'
 import styles from './index.module.less'
 
@@ -22,6 +23,7 @@ const Chat = () => {
   const scrollRef = useRef(null)
   const stickRef = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
+  const [shareOpen, setShareOpen] = useState(false)
   const lastId = messages[messages.length - 1]?.id
 
   const scrollToBottom = useCallback((behavior = 'auto') => {
@@ -69,9 +71,23 @@ const Chat = () => {
   const hour = new Date().getHours()
   const greeting = hour >= 6 && hour < 12 ? '上午好' : hour >= 12 && hour < 18 ? '下午好' : '晚上好'
 
+  const shareButton = (
+    <Tooltip title="分享访问链接">
+      <Button
+        className={styles.shareBtn}
+        shape="circle"
+        icon={<ShareAltOutlined />}
+        onClick={() => setShareOpen(true)}
+        aria-label="分享访问链接"
+      />
+    </Tooltip>
+  )
+
   if (!current || messages.length === 0) {
     return (
       <div className={styles.chatPage}>
+        {shareButton}
+
         <div className={styles.welcome}>
           <img className={styles.welcomeLogo} src="/logo.svg" alt="白马AI" />
           <h1>{greeting}，有什么可以帮到你吗？</h1>
@@ -79,12 +95,16 @@ const Chat = () => {
 
           <Composer key={currentId || 'new'} />
         </div>
+
+        <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
       </div>
     )
   }
 
   return (
     <div className={styles.chatPage}>
+      {shareButton}
+
       <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
         <div className={styles.messageList}>
           {messages.map((message) => (
@@ -114,6 +134,8 @@ const Chat = () => {
       <div className={styles.footer}>
         <Composer key={currentId || 'new'} />
       </div>
+
+      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
     </div>
   )
 }

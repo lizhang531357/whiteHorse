@@ -47,5 +47,14 @@ export const useAuth = () => {
     return data.user
   }, [])
 
-  return { user, loading, login, register, logout, updateProfile }
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    await api.changePassword(currentPassword, newPassword)
+  }, [])
+
+  const deleteAccount = useCallback(async () => {
+    await api.deleteAccount()
+    setUser(null)
+  }, [])
+
+  return { user, loading, login, register, logout, updateProfile, changePassword, deleteAccount }
 }

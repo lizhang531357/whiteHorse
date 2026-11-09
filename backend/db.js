@@ -11,6 +11,8 @@ fs.mkdirSync(dataDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'baima.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// 两个后端实例同时读写时，遇到锁最多等待 5 秒，避免直接报 SQLITE_BUSY
+db.pragma('busy_timeout = 5000');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -43,6 +45,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS user_settings (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     model TEXT NOT NULL DEFAULT '',
+    base_url TEXT NOT NULL DEFAULT '',
     temperature REAL NOT NULL DEFAULT 0.7,
     system_prompt TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL DEFAULT '',
@@ -59,7 +62,22 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_files_user ON files(user_id);
+
+  CREATE TABLE IF NOT EXISTS password_resets (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 `);
+
+// 旧库补 base_url 字段
+const settingsColumns = db.prepare('PRAGMA table_info(user_settings)').all().map((column) => column.name);
+if (!settingsColumns.includes('base_url')) {
+  db.exec("ALTER TABLE user_settings ADD COLUMN base_url TEXT NOT NULL DEFAULT ''");
+}
 
 // 把历史明文 API Key 迁移成密文
 try {
@@ -101,10 +119,11 @@ const stmts = {
   `),
   getSettings: db.prepare('SELECT * FROM user_settings WHERE user_id = ?'),
   upsertSettings: db.prepare(`
-    INSERT INTO user_settings (user_id, model, temperature, system_prompt, api_key, updated_at)
-    VALUES (@userId, @model, @temperature, @systemPrompt, @apiKey, @updatedAt)
+    INSERT INTO user_settings (user_id, model, base_url, temperature, system_prompt, api_key, updated_at)
+    VALUES (@userId, @model, @baseUrl, @temperature, @systemPrompt, @apiKey, @updatedAt)
     ON CONFLICT(user_id) DO UPDATE SET
       model = excluded.model,
+      base_url = excluded.base_url,
       temperature = excluded.temperature,
       system_prompt = excluded.system_prompt,
       api_key = excluded.api_key,
@@ -209,6 +228,7 @@ export function getRawSettings(userId) {
     return {
       user_id: userId,
       model: '',
+      base_url: '',
       temperature: 0.7,
       system_prompt: '',
       api_key: '',
@@ -238,10 +258,69 @@ export function getFileRecord(id, userId) {
   return selectFile.get(id, userId);
 }
 
+const insertPasswordReset = db.prepare(
+  'INSERT INTO password_resets (user_id, code_hash, salt, attempts, expires_at, created_at) VALUES (?, ?, ?, 0, ?, ?)',
+);
+const selectPasswordReset = db.prepare('SELECT * FROM password_resets WHERE user_id = ?');
+const deletePasswordResetStmt = db.prepare('DELETE FROM password_resets WHERE user_id = ?');
+const incrementResetAttemptsStmt = db.prepare(
+  'UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = ?',
+);
+const updatePasswordStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+const deleteUserSessionsStmt = db.prepare('DELETE FROM sessions WHERE user_id = ?');
+const deleteOtherUserSessionsStmt = db.prepare(
+  'DELETE FROM sessions WHERE user_id = ? AND token <> ?',
+);
+
+export function savePasswordReset(userId, codeHash, salt, expiresAt) {
+  const save = db.transaction(() => {
+    deletePasswordResetStmt.run(userId);
+    insertPasswordReset.run(userId, codeHash, salt, expiresAt, Date.now());
+  });
+  save();
+}
+
+export function getPasswordReset(userId) {
+  return selectPasswordReset.get(userId);
+}
+
+export function deletePasswordReset(userId) {
+  deletePasswordResetStmt.run(userId);
+}
+
+export function incrementPasswordResetAttempts(userId) {
+  incrementResetAttemptsStmt.run(userId);
+}
+
+export function updateUserPassword(userId, passwordHash) {
+  updatePasswordStmt.run(passwordHash, userId);
+}
+
+export function deleteUserSessions(userId, keepToken = '') {
+  if (keepToken) {
+    deleteOtherUserSessionsStmt.run(userId, keepToken);
+  } else {
+    deleteUserSessionsStmt.run(userId);
+  }
+}
+
+export function deleteUser(userId) {
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+}
+
+export function deleteAllConversations(userId) {
+  db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+}
+
+export function deleteAllFiles(userId) {
+  db.prepare('DELETE FROM files WHERE user_id = ?').run(userId);
+}
+
 export function saveSettings(userId, settings) {
   stmts.upsertSettings.run({
     userId,
     model: String(settings.model || '').slice(0, 64),
+    baseUrl: String(settings.baseUrl || '').slice(0, 300),
     temperature: Number.isFinite(Number(settings.temperature))
       ? Math.min(2, Math.max(0, Number(settings.temperature)))
       : 0.7,

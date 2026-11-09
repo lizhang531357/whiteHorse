@@ -15,8 +15,8 @@
   --bm-chip-border: #e2e8f0;
   --bm-text: #1a1a1a;
   --bm-text-soft: #6b7280;
-  --bm-accent: #185fa5;
-  --bm-accent-weak: rgba(24, 95, 165, 0.1);
+  --bm-accent: @theme-accent;
+  --bm-accent-weak: color-mix(in srgb, var(--bm-accent) 10%, transparent);
   --bm-border: #e2e2df;
   --bm-code-inline-bg: #f1f2f4;
   --bm-input-bg: #ffffff;
@@ -40,8 +40,8 @@
   --bm-chip-border: #34373c;
   --bm-text: #e8e8e6;
   --bm-text-soft: #9aa0a8;
-  --bm-accent: #6cb6ff;
-  --bm-accent-weak: rgba(108, 182, 255, 0.14);
+  --bm-accent: @theme-accent-dark;
+  --bm-accent-weak: color-mix(in srgb, var(--bm-accent) 14%, transparent);
   --bm-border: #34373c;
   --bm-code-inline-bg: #2b2e33;
   --bm-input-bg: #202226;
@@ -71,6 +71,11 @@ html body {
 
 ::selection {
   background: @accent-weak;
+}
+
+// 统一所有 antd 按钮的圆角（排除圆形按钮）
+.ant-btn:not(.ant-btn-circle):not(.ant-btn-round) {
+  border-radius: 8px;
 }
 
 // 统一所有 antd 输入框的圆角与聚焦样式

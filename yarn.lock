@@ -1756,6 +1756,11 @@ node-releases@^2.0.26:
   resolved "https://v8npm.seeyonv8.com/node-releases/-/node-releases-2.0.27.tgz#d2a0503716b42d25c8ce12dcef08c9342f8cd575"
   integrity sha512-MeTgzi76UBp8AUwkQRq1zTxS4BVwt+rArOgTne0rJceYl3MC1Tt4mqoTw2QX1VrJ6PXyAUGSXcXDkIpsNAc1bg==
 
+nodemailer@^10.3.1:
+  version "10.3.1"
+  resolved "https://registry.npmmirror.com/nodemailer/-/nodemailer-10.3.1.tgz#77295b3b5dd00b93e96962a55255a21321ce8f32"
+  integrity sha512-uF0AFsJC07Y1vdW7p580DKAnh7rAO+4UPSSB3mDCPNDufoiaOebV6JmrzpxB14OjEEEiBsNdYoM2Y+fN8M7BBA==
+
 once@^1.3.1, once@^1.4.0:
   version "1.4.0"
   resolved "https://registry.npmmirror.com/once/-/once-1.4.0.tgz#583b1aa775961d4b113ac17d9c50baef9dd76bd1"

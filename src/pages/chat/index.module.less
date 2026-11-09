@@ -7,6 +7,24 @@
   height: 100%;
   background: @bg;
 
+  .shareBtn {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    z-index: 3;
+    width: 36px;
+    height: 36px;
+    color: @text-soft;
+    background: @input-bg;
+    border: 1px solid @border;
+    box-shadow: 0 2px 8px @shadow;
+
+    &:hover {
+      color: @accent;
+      border-color: @accent;
+    }
+  }
+
   .toBottom {
     position: absolute;
     bottom: 96px;
@@ -62,7 +80,7 @@
 
   .messages {
     flex: 1;
-    padding: 28px 24px 16px;
+    padding: 48px 24px 16px;
     overflow-y: auto;
 
     .messageList {
@@ -89,8 +107,13 @@
       }
     }
 
+    .shareBtn {
+      top: 12px;
+      right: 12px;
+    }
+
     .messages {
-      padding: 16px 12px 8px;
+      padding: 44px 12px 8px;
     }
 
     .footer {

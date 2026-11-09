@@ -33,10 +33,23 @@ export const api = {
   register: (payload: unknown) => request('/api/auth/register', { method: 'POST', body: payload }),
   logout: () => request('/api/auth/logout', { method: 'POST', body: {} }),
   updateProfile: (patch: unknown) => request('/api/auth/profile', { method: 'PUT', body: patch }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request('/api/auth/password', {
+      method: 'PUT',
+      body: { currentPassword, newPassword },
+    }),
+  forgotPassword: (email: string) =>
+    request('/api/auth/forgot', { method: 'POST', body: { email } }),
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    request('/api/auth/reset', { method: 'POST', body: { email, code, newPassword } }),
   getSettings: () => request('/api/settings'),
   updateSettings: (patch: unknown) => request('/api/settings', { method: 'PUT', body: patch }),
+  revealApiKey: () => request('/api/settings/api-key'),
+  deleteAccount: () => request('/api/auth/account', { method: 'DELETE' }),
   getConversations: () => request('/api/conversations'),
+  deleteAllConversations: () => request('/api/conversations', { method: 'DELETE' }),
   syncConversations: (payload: unknown) =>
     request('/api/conversations/sync', { method: 'POST', body: payload }),
   generateTitle: (text: string) => request('/api/title', { method: 'POST', body: { text } }),
+  getShare: () => request('/api/share'),
 }

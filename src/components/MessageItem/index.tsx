@@ -4,13 +4,10 @@ import {
   CheckOutlined,
   CopyOutlined,
   DeleteOutlined,
-  DownloadOutlined,
-  DownOutlined,
   EditOutlined,
   FileTextOutlined,
   PictureOutlined,
   ReloadOutlined,
-  RightOutlined,
 } from '@ant-design/icons'
 import { formatSize, isImageFile } from '../../utils/file'
 import styles from './index.module.less'
@@ -40,7 +37,6 @@ const MessageFiles = ({ files = [] }) => {
                   type="link"
                   size="small"
                   className={styles.downloadBtn}
-                  icon={<DownloadOutlined />}
                   href={href}
                   target="_blank"
                   rel="noreferrer"
@@ -58,14 +54,12 @@ const MessageFiles = ({ files = [] }) => {
               key={`${file.name}-${index}`}
               size="small"
               className={styles.fileButton}
-              icon={isImage ? <PictureOutlined /> : <FileTextOutlined />}
               href={href}
               target="_blank"
               rel="noreferrer"
               title={`${file.name} · ${formatSize(file.size)}`}
             >
               <span className={styles.fileName}>{file.name}</span>
-              <DownloadOutlined className={styles.downloadIcon} />
             </Button>
           )
         }
@@ -146,7 +140,6 @@ const MessageItem = ({
               <Button
                 type="text"
                 size="small"
-                icon={<ReloadOutlined />}
                 disabled={!canOperate}
                 onClick={() => onRegenerate?.(message.id)}
               >
@@ -179,7 +172,6 @@ const MessageItem = ({
               type="text"
               size="small"
               className={styles.reasoningToggle}
-              icon={showReasoning ? <DownOutlined /> : <RightOutlined />}
               onClick={() => setShowReasoning((v) => !v)}
             >
               {streaming && !message.content ? '正在思考…' : '思考过程'}

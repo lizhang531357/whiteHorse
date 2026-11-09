@@ -125,7 +125,6 @@ const ConversationList = ({ collapsed, onNavigate }) => {
       <Button
         className={styles.newChat}
         type="dashed"
-        icon={<PlusOutlined />}
         onClick={() => {
           createConversation()
           onNavigate?.()

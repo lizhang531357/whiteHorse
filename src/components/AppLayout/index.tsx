@@ -1,6 +1,11 @@
 import { useState } from 'react'
-import { Avatar, Button, Drawer, Layout } from 'antd'
-import { MenuFoldOutlined, MenuOutlined } from '@ant-design/icons'
+import { Avatar, Button, Drawer, Dropdown, Layout } from 'antd'
+import {
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuOutlined,
+  SettingOutlined,
+} from '@ant-design/icons'
 import ConversationList from '../ConversationList'
 import UserModal from '../UserModal'
 import { useAuthContext } from '../../context/AuthContext'
@@ -10,7 +15,7 @@ import styles from './index.module.less'
 const { Sider, Content } = Layout
 
 const AppLayout = ({ children }) => {
-  const { user } = useAuthContext()
+  const { user, logout } = useAuthContext()
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -54,20 +59,34 @@ const AppLayout = ({ children }) => {
         </div>
 
         <div className={styles.siderBottom}>
-          <Button
-            type="text"
-            block
-            className={styles.mine}
-            onClick={() => {
-              setUserOpen(true)
-              setDrawerOpen(false)
+          <Dropdown
+            trigger={['click']}
+            placement="topLeft"
+            menu={{
+              items: [
+                { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
+                { type: 'divider' as const },
+                { key: 'logout', icon: <LogoutOutlined />, label: '退出账号', danger: true },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'settings') {
+                  setUserOpen(true)
+                  setDrawerOpen(false)
+                }
+                if (key === 'logout') {
+                  setDrawerOpen(false)
+                  logout()
+                }
+              },
             }}
           >
-            <Avatar size={28} style={{ background: user.color }}>
-              {String(user.name || 'U').slice(0, 1).toUpperCase()}
-            </Avatar>
-            {!isCollapsed && <span className={styles.mineName}>{user.name}</span>}
-          </Button>
+            <Button type="text" block className={styles.mine}>
+              <Avatar size={28} style={{ background: user.color }}>
+                {String(user.name || 'U').slice(0, 1).toUpperCase()}
+              </Avatar>
+              {!isCollapsed && <span className={styles.mineName}>{user.name}</span>}
+            </Button>
+          </Dropdown>
         </div>
       </div>
     )

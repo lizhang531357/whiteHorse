@@ -10,6 +10,7 @@ export const MODELS = [
 
 export const DEFAULT_SETTINGS = {
   model: '',
+  baseUrl: '',
   temperature: 0.7,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
 }

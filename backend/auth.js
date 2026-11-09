@@ -26,6 +26,28 @@ export function createToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+export function createSalt() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+export function createResetCode() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+export function hashResetCode(code, salt) {
+  return crypto.createHash('sha256').update(`${salt}:${code}`).digest('hex');
+}
+
+export function verifyResetCode(code, salt, storedHash) {
+  try {
+    const expected = Buffer.from(String(storedHash), 'hex');
+    const actual = Buffer.from(hashResetCode(code, salt), 'hex');
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  } catch {
+    return false;
+  }
+}
+
 function parseCookies(req) {
   const header = req.headers.cookie || '';
   const result = {};
