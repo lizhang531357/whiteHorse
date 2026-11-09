@@ -1,8 +1,7 @@
-const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp)$/i
+import { isImageFile } from './file'
 
 export const createThumbnail = async (file, maxSize = 320, quality = 0.72) => {
-  const isImage = String(file?.type || '').startsWith('image/') || IMAGE_EXT_RE.test(file?.name || '')
-  if (!isImage) return ''
+  if (!isImageFile(file)) return ''
 
   const bitmap = await createImageBitmap(file)
   const scale = Math.min(1, maxSize / Math.max(bitmap.width || 1, bitmap.height || 1))

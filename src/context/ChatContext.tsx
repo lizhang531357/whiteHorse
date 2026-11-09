@@ -268,6 +268,9 @@ export const ChatProvider = ({ children }) => {
           onUsage: (value) => {
             flush({ usage: value })
           },
+          onModel: (model) => {
+            if (model) patchMessage(convId, aiId, { model })
+          },
           onError: (msg) => {
             streamError = msg
           },

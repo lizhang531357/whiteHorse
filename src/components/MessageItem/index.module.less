@@ -2,6 +2,7 @@
 
 .message {
   display: flex;
+  align-items: center;
   gap: 10px;
   width: 100%;
 
@@ -103,21 +104,22 @@
     padding: 0;
     font-size: 12px;
     line-height: 1.4;
-
-    :global(.anticon) {
-      font-size: 12px;
-    }
-  }
-
-  .downloadIcon {
-    margin-left: 4px;
-    color: @text-soft;
   }
 
   .usage {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-top: 2px;
     font-size: 12px;
     color: @text-soft;
+
+    .usageModel {
+      padding: 0 6px;
+      color: @accent;
+      background: @accent-weak;
+      border-radius: 4px;
+    }
   }
 
   .fileButton,
@@ -147,10 +149,6 @@
     &:hover {
       color: @accent;
       border-color: @accent;
-    }
-
-    :global(.ant-btn-icon) {
-      color: @accent;
     }
   }
 

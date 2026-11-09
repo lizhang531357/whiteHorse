@@ -24,6 +24,7 @@ export interface Message {
   reasoning?: string
   files?: MessageFile[]
   promptContent?: string
+  model?: string
   createdAt: number
   status?: MessageStatus
   error?: string
@@ -34,6 +35,7 @@ export interface Conversation {
   id: string
   title: string
   messages: Message[]
+  pinned?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -43,6 +45,7 @@ export interface User {
   name: string
   email: string
   color: string
+  avatar?: string
   createdAt?: number
 }
 

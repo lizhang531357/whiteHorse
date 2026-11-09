@@ -8,6 +8,7 @@ import {
   MessageOutlined,
   MoreOutlined,
   PlusOutlined,
+  PushpinOutlined,
 } from '@ant-design/icons'
 import { useChatContext } from '../../context/ChatContext'
 import { exportConversation } from '../../utils/export'
@@ -38,6 +39,7 @@ const ConversationList = ({ collapsed, onNavigate }) => {
     createConversation,
     renameConversation,
     deleteConversation,
+    togglePin,
   } = useChatContext()
 
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null)
@@ -45,7 +47,10 @@ const ConversationList = ({ collapsed, onNavigate }) => {
   const [keyword, setKeyword] = useState('')
 
   const sorted = useMemo(() => {
-    const list = [...conversations].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    const list = [...conversations].sort((a, b) => {
+      const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
+      return pinDiff || (b.updatedAt || 0) - (a.updatedAt || 0)
+    })
     const kw = keyword.trim().toLowerCase()
     if (!kw) return list
 
@@ -86,6 +91,11 @@ const ConversationList = ({ collapsed, onNavigate }) => {
   const menuFor = (conv: Conversation): MenuProps => {
     return {
       items: [
+        {
+          key: 'pin',
+          icon: <PushpinOutlined />,
+          label: conv.pinned ? '取消置顶' : '置顶',
+        },
         { key: 'rename', icon: <EditOutlined />, label: '重命名' },
         { key: 'export', icon: <ExportOutlined />, label: '导出 Markdown' },
         { type: 'divider' as const },
@@ -93,6 +103,7 @@ const ConversationList = ({ collapsed, onNavigate }) => {
       ],
       onClick: ({ key, domEvent }) => {
         domEvent.stopPropagation()
+        if (key === 'pin') togglePin(conv.id)
         if (key === 'rename') startRename(conv)
         if (key === 'export') {
           exportConversation(conv, 'md')
@@ -135,20 +146,36 @@ const ConversationList = ({ collapsed, onNavigate }) => {
 
       <Input.Search
         className={styles.search}
-        size="small"
         allowClear
-        placeholder="搜索对话"
+        placeholder="搜索标题或内容"
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
+        onSearch={(value) => setKeyword(value)}
       />
 
       <div className={styles.list}>
+        {keyword.trim() && sorted.length > 0 && (
+          <div className={styles.resultCount}>找到 {sorted.length} 个对话</div>
+        )}
+
         {sorted.length === 0 ? (
-          <Empty
-            className={styles.empty}
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={keyword.trim() ? '没有匹配的对话' : '还没有对话'}
-          />
+          keyword.trim() ? (
+            <div className={styles.noResult}>
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={`没有找到包含「${keyword.trim()}」的对话`}
+              />
+              <Button type="link" size="small" onClick={() => setKeyword('')}>
+                清除搜索
+              </Button>
+            </div>
+          ) : (
+            <Empty
+              className={styles.empty}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="还没有对话"
+            />
+          )
         ) : (
           sorted.map((conv) => (
             <div
@@ -161,7 +188,11 @@ const ConversationList = ({ collapsed, onNavigate }) => {
               role="button"
               tabIndex={0}
             >
-              <MessageOutlined className={styles.itemIcon} />
+              {conv.pinned ? (
+                <PushpinOutlined className={styles.itemIcon} />
+              ) : (
+                <MessageOutlined className={styles.itemIcon} />
+              )}
               <span className={styles.title} title={conv.title}>
                 {conv.title}
               </span>

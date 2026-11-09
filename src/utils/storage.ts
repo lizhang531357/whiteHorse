@@ -32,11 +32,3 @@ export const saveString = (key, value) => {
     // ignore
   }
 }
-
-export const removeKey = (key) => {
-  try {
-    localStorage.removeItem(key)
-  } catch {
-    // ignore
-  }
-}

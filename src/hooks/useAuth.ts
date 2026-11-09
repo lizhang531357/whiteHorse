@@ -47,6 +47,12 @@ export const useAuth = () => {
     return data.user
   }, [])
 
+  const updateAvatar = useCallback(async (avatar) => {
+    const data = await api.updateAvatar(avatar)
+    setUser(data.user)
+    return data.user
+  }, [])
+
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     await api.changePassword(currentPassword, newPassword)
   }, [])
@@ -56,5 +62,15 @@ export const useAuth = () => {
     setUser(null)
   }, [])
 
-  return { user, loading, login, register, logout, updateProfile, changePassword, deleteAccount }
+  return {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    updateProfile,
+    updateAvatar,
+    changePassword,
+    deleteAccount,
+  }
 }

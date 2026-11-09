@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
+  AutoComplete,
   Button,
   Form,
   Input,
@@ -8,6 +9,7 @@ import {
   Radio,
   Slider,
   Tooltip,
+  Upload,
   message,
 } from 'antd'
 import {
@@ -25,11 +27,13 @@ import {
 } from '@ant-design/icons'
 import { useAuthContext } from '../../context/AuthContext'
 import { useChatContext } from '../../context/ChatContext'
+import { MODEL_PRESETS } from '../../constants'
 import { api } from '../../utils/api'
+import AvatarCropper from './AvatarCropper'
 import styles from './index.module.less'
 
 const UserModal = ({ open, onClose }) => {
-  const { user, updateProfile, changePassword, deleteAccount } = useAuthContext()
+  const { user, updateProfile, updateAvatar, changePassword, deleteAccount } = useAuthContext()
   const {
     settings,
     updateSettings,
@@ -63,12 +67,25 @@ const UserModal = ({ open, onClose }) => {
     theme,
   })
   const [savingConfig, setSavingConfig] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [cropOpen, setCropOpen] = useState(false)
+  const [cropSrc, setCropSrc] = useState('')
+  const cropUrlRef = useRef('')
   const [apiKeyTouched, setApiKeyTouched] = useState(false)
   const [keyVisible, setKeyVisible] = useState(false)
   const [revealing, setRevealing] = useState(false)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      if (cropUrlRef.current) {
+        URL.revokeObjectURL(cropUrlRef.current)
+        cropUrlRef.current = ''
+      }
+      setCropOpen(false)
+      setCropSrc('')
+      return
+    }
     setTab('general')
     setEditing(false)
     setShowPasswordForm(false)
@@ -128,6 +145,58 @@ const UserModal = ({ open, onClose }) => {
     }
   }
 
+  const closeCrop = () => {
+    if (cropUrlRef.current) {
+      URL.revokeObjectURL(cropUrlRef.current)
+      cropUrlRef.current = ''
+    }
+    setCropSrc('')
+    setCropOpen(false)
+  }
+
+  const handleAvatarUpload = (file: File) => {
+    if (!String(file.type || '').startsWith('image/')) {
+      message.error('请选择图片文件')
+      return Upload.LIST_IGNORE
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片不能超过 5MB')
+      return Upload.LIST_IGNORE
+    }
+
+    if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current)
+    const url = URL.createObjectURL(file)
+    cropUrlRef.current = url
+    setCropSrc(url)
+    setCropOpen(true)
+    return Upload.LIST_IGNORE
+  }
+
+  const handleCropConfirm = async (dataUrl: string) => {
+    setAvatarUploading(true)
+    try {
+      await updateAvatar(dataUrl)
+      message.success('头像已更新')
+      closeCrop()
+    } catch (err: any) {
+      message.error(err?.message || '头像更新失败')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const removeAvatar = async () => {
+    setAvatarUploading(true)
+    try {
+      await updateAvatar('')
+      message.success('头像已移除')
+    } catch (err: any) {
+      message.error(err?.message || '移除失败')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   const saveConfig = async () => {
     const baseUrl = config.baseUrl.trim()
     if (baseUrl) {
@@ -170,6 +239,43 @@ const UserModal = ({ open, onClose }) => {
       message.error(err?.message || '保存失败')
     } finally {
       setSavingConfig(false)
+    }
+  }
+
+  const testConnection = async () => {
+    const baseUrl = config.baseUrl.trim()
+    if (baseUrl) {
+      try {
+        const parsed = new URL(baseUrl)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('protocol')
+        }
+      } catch {
+        message.error('接口地址必须是 http/https 地址')
+        return
+      }
+    }
+
+    setTesting(true)
+    try {
+      const data: any = await api.testConnection({
+        baseUrl,
+        model: config.model.trim(),
+        apiKey: apiKeyTouched ? config.apiKey.trim() : '',
+      })
+      if (data?.ok) {
+        const extra =
+          Array.isArray(data.models) && data.models.length
+            ? `，可用模型 ${data.models.length} 个`
+            : ''
+        message.success(`连接成功${extra}`)
+      } else {
+        message.error(data?.error || '连接失败')
+      }
+    } catch (err: any) {
+      message.error(err?.message || '连接失败')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -297,6 +403,40 @@ const UserModal = ({ open, onClose }) => {
 
   const accountContent = (
     <div className={styles.account}>
+      <div className={styles.row}>
+        <div className={styles.rowLabel}>头像</div>
+        <div className={styles.rowControl}>
+          <div className={styles.avatarWrap}>
+            <Upload
+              accept="image/*"
+              showUploadList={false}
+              beforeUpload={handleAvatarUpload}
+            >
+              <div
+                className={styles.avatarBox}
+                style={!user.avatar ? { background: user.color } : undefined}
+              >
+                {user.avatar ? (
+                  <img className={styles.avatarImg} src={user.avatar} alt="头像" />
+                ) : (
+                  <span className={styles.avatarLetter}>
+                    {String(user.name || 'U').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <span className={styles.avatarMask}>
+                  {avatarUploading ? '上传中…' : '更换'}
+                </span>
+              </div>
+            </Upload>
+            {user.avatar && (
+              <Button type="link" size="small" loading={avatarUploading} onClick={removeAvatar}>
+                移除
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className={styles.row}>
         <div className={styles.rowLabel}>用户名</div>
         <div className={styles.rowControl}>
@@ -521,12 +661,19 @@ const UserModal = ({ open, onClose }) => {
         </div>
         <div className={styles.rowControl}>
           <div className={styles.controlCol}>
-            <Input
+            <AutoComplete
+              style={{ width: '100%' }}
               value={config.model}
-              onChange={(e) => setConfig((prev) => ({ ...prev, model: e.target.value }))}
+              options={MODEL_PRESETS}
+              onChange={(value) => setConfig((prev) => ({ ...prev, model: value }))}
               placeholder={serverModel || '留空使用服务端默认模型'}
               maxLength={64}
               allowClear
+              filterOption={(input, option) =>
+                String(option?.value || '')
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
+              }
             />
           </div>
         </div>
@@ -656,6 +803,13 @@ const UserModal = ({ open, onClose }) => {
           {tab === 'model' && (
             <div className={styles.mainFooter}>
               <Button
+                className={styles.actionButton}
+                loading={testing}
+                onClick={testConnection}
+              >
+                测试连接
+              </Button>
+              <Button
                 type="primary"
                 className={styles.actionButton}
                 loading={savingConfig}
@@ -667,6 +821,14 @@ const UserModal = ({ open, onClose }) => {
           )}
         </section>
       </div>
+
+      <AvatarCropper
+        open={cropOpen}
+        src={cropSrc}
+        loading={avatarUploading}
+        onCancel={closeCrop}
+        onConfirm={handleCropConfirm}
+      />
     </Modal>
   )
 }

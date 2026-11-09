@@ -21,6 +21,7 @@ db.exec(`
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     color TEXT NOT NULL DEFAULT '#185fa5',
+    avatar TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL
   );
 
@@ -37,6 +38,7 @@ db.exec(`
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     messages TEXT NOT NULL DEFAULT '[]',
+    pinned INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -79,6 +81,18 @@ if (!settingsColumns.includes('base_url')) {
   db.exec("ALTER TABLE user_settings ADD COLUMN base_url TEXT NOT NULL DEFAULT ''");
 }
 
+// 旧库补会话置顶字段
+const conversationColumns = db.prepare('PRAGMA table_info(conversations)').all().map((column) => column.name);
+if (!conversationColumns.includes('pinned')) {
+  db.exec('ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+}
+
+// 旧库补用户头像字段
+const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
+if (!userColumns.includes('avatar')) {
+  db.exec("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''");
+}
+
 // 把历史明文 API Key 迁移成密文
 try {
   const pending = db.prepare("SELECT user_id, api_key FROM user_settings WHERE api_key <> ''").all();
@@ -97,6 +111,7 @@ const stmts = {
   userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   updateProfile: db.prepare('UPDATE users SET name = @name, email = @email WHERE id = @id'),
+  updateAvatar: db.prepare('UPDATE users SET avatar = @avatar WHERE id = @id'),
   insertSession: db.prepare(
     'INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
   ),
@@ -106,14 +121,15 @@ const stmts = {
   deleteSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   deleteExpiredSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
   listConversations: db.prepare(
-    'SELECT id, title, messages, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC',
+    'SELECT id, title, messages, pinned, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY pinned DESC, updated_at DESC',
   ),
   upsertConversation: db.prepare(`
-    INSERT INTO conversations (id, user_id, title, messages, created_at, updated_at)
-    VALUES (@id, @userId, @title, @messages, @createdAt, @updatedAt)
+    INSERT INTO conversations (id, user_id, title, messages, pinned, created_at, updated_at)
+    VALUES (@id, @userId, @title, @messages, @pinned, @createdAt, @updatedAt)
     ON CONFLICT(id) DO UPDATE SET
       title = excluded.title,
       messages = excluded.messages,
+      pinned = excluded.pinned,
       updated_at = excluded.updated_at
     WHERE conversations.user_id = excluded.user_id
   `),
@@ -138,16 +154,13 @@ export function publicUser(row) {
     name: row.name,
     email: row.email,
     color: row.color,
+    avatar: row.avatar || '',
     createdAt: row.created_at,
   };
 }
 
 export function getUserByEmail(email) {
   return stmts.userByEmail.get(email);
-}
-
-export function getUserById(id) {
-  return stmts.userById.get(id);
 }
 
 export function createUser(user) {
@@ -157,6 +170,11 @@ export function createUser(user) {
 
 export function updateUserProfile(id, name, email) {
   stmts.updateProfile.run({ id, name, email });
+  return stmts.userById.get(id);
+}
+
+export function updateUserAvatar(id, avatar) {
+  stmts.updateAvatar.run({ id, avatar });
   return stmts.userById.get(id);
 }
 
@@ -191,6 +209,7 @@ export function listConversations(userId) {
       id: row.id,
       title: row.title,
       messages: Array.isArray(messages) ? messages : [],
+      pinned: Boolean(row.pinned),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -205,6 +224,7 @@ export function upsertConversations(userId, conversations) {
         userId,
         title: String(conv.title || '新对话').slice(0, 200),
         messages: JSON.stringify(Array.isArray(conv.messages) ? conv.messages : []),
+        pinned: conv.pinned ? 1 : 0,
         createdAt: Number(conv.createdAt) || Date.now(),
         updatedAt: Number(conv.updatedAt) || Date.now(),
       });

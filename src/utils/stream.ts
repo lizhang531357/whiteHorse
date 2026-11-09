@@ -4,11 +4,12 @@ interface SSEHandlers {
   onPrompt?: (content: string) => void
   onFiles?: (files: any[]) => void
   onUsage?: (usage: any) => void
+  onModel?: (model: string) => void
   onError?: (message: string) => void
 }
 
 export const consumeSSE = async (response: Response, handlers: SSEHandlers = {}) => {
-  const { onDelta, onReasoning, onPrompt, onFiles, onUsage, onError } = handlers
+  const { onDelta, onReasoning, onPrompt, onFiles, onUsage, onModel, onError } = handlers
 
   if (!response.body) throw new Error('服务端未返回流式内容')
 
@@ -47,6 +48,11 @@ export const consumeSSE = async (response: Response, handlers: SSEHandlers = {})
 
         if (json.type === 'files') {
           onFiles?.(json.files || [])
+          continue
+        }
+
+        if (json.type === 'model') {
+          onModel?.(String(json.model || ''))
           continue
         }
 

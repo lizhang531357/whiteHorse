@@ -10,6 +10,7 @@ import {
   getUserByEmail,
   createUser,
   updateUserProfile,
+  updateUserAvatar,
   createSession,
   deleteSession,
   listConversations,
@@ -601,6 +602,27 @@ async function handleProfile(req, res) {
   sendJson(res, 200, { user: publicUser(updated) });
 }
 
+async function handleUpdateAvatar(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const avatar = typeof body.avatar === 'string' ? body.avatar.trim() : '';
+  if (avatar) {
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(avatar)) {
+      return sendError(res, 400, '头像格式不支持');
+    }
+    if (avatar.length > 1024 * 1024) {
+      return sendError(res, 400, '头像太大了，请换一张更小的图片');
+    }
+  }
+
+  const updated = updateUserAvatar(user.id, avatar);
+  sendJson(res, 200, { user: publicUser(updated) });
+}
+
 async function handleChangePassword(req, res) {
   const user = requireUser(req, res);
   if (!user) return;
@@ -756,6 +778,81 @@ function handleRevealApiKey(req, res) {
 
   res.setHeader('Cache-Control', 'no-store');
   sendJson(res, 200, { apiKey: settings.api_key });
+}
+
+async function handleTestConnection(req, res) {
+  const user = requireUser(req, res);
+  if (!user) return;
+
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const current = getRawSettings(user.id);
+  const rawBaseUrl =
+    typeof body.baseUrl === 'string' && body.baseUrl.trim()
+      ? body.baseUrl.trim()
+      : current.base_url || BASE_URL;
+
+  let baseUrl;
+  try {
+    const parsed = new URL(rawBaseUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('protocol');
+    baseUrl = rawBaseUrl.replace(/\/+$/, '');
+  } catch {
+    return sendError(res, 400, '接口地址必须是 http/https 地址', { field: 'baseUrl' });
+  }
+
+  const apiKey =
+    typeof body.apiKey === 'string' && body.apiKey.trim()
+      ? body.apiKey.trim()
+      : current.api_key;
+  if (!apiKey) return sendError(res, 400, '请先填写 API Key', { field: 'apiKey' });
+
+  const model = (typeof body.model === 'string' && body.model.trim()) || current.model || MODEL;
+
+  try {
+    const modelsRes = await fetch(`${baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (modelsRes.ok) {
+      let models = [];
+      try {
+        const data = await modelsRes.json();
+        models = Array.isArray(data?.data) ? data.data.map((item) => item.id).filter(Boolean) : [];
+      } catch {
+        models = [];
+      }
+      return sendJson(res, 200, { ok: true, models: models.slice(0, 50) });
+    }
+
+    // 部分服务不实现 /models，退回一次最小对话请求
+    const chatRes = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    });
+
+    if (chatRes.ok) return sendJson(res, 200, { ok: true });
+
+    let detail = '';
+    try {
+      const data = await chatRes.json();
+      detail = data?.error?.message || data?.error?.type || '';
+    } catch {
+      detail = '';
+    }
+    return sendJson(res, 200, { ok: false, error: detail || `连接失败（HTTP ${chatRes.status}）` });
+  } catch (err) {
+    return sendJson(res, 200, { ok: false, error: '连接失败：' + err.message });
+  }
 }
 
 function handleDeleteAllConversations(req, res) {
@@ -999,7 +1096,7 @@ async function handleChat(req, res) {
   const attachments = Array.isArray(payload.attachments) ? payload.attachments.slice(0, 5) : [];
 
   if (!message && attachments.length === 0) {
-    sendJson(400, { error: '消息和附件不能同时为空' });
+    sendJson(res, 400, { error: '消息和附件不能同时为空' });
     return;
   }
 
@@ -1103,7 +1200,7 @@ async function handleChat(req, res) {
       body: JSON.stringify(requestBody),
     });
   } catch (err) {
-    sendJson(500, { error: '调用模型失败：' + err.message });
+    sendJson(res, 500, { error: '调用模型失败：' + err.message });
     return;
   }
 
@@ -1119,15 +1216,15 @@ async function handleChat(req, res) {
 
     if (data?.error) {
       const msg = data.error.message || data.error.type || JSON.stringify(data.error);
-      sendJson(200, { error: msg });
+      sendJson(res, 200, { error: msg });
     } else {
-      sendJson(200, { error: '模型未返回内容：' + JSON.stringify(data) });
+      sendJson(res, 200, { error: '模型未返回内容：' + JSON.stringify(data) });
     }
     return;
   }
 
   if (!upstream.body) {
-    sendJson(500, { error: '模型没有返回流式内容' });
+    sendJson(res, 500, { error: '模型没有返回流式内容' });
     return;
   }
 
@@ -1138,6 +1235,7 @@ async function handleChat(req, res) {
     'X-Accel-Buffering': 'no',
   });
 
+  res.write(`data: ${JSON.stringify({ type: 'model', model })}\n\n`);
   res.write(`data: ${JSON.stringify({ type: 'prompt', content: textContent })}\n\n`);
   res.write(`data: ${JSON.stringify({ type: 'files', files: savedFiles })}\n\n`);
 
@@ -1262,6 +1360,7 @@ const server = http.createServer(async (req, res) => {
     if (method === 'POST' && pathname === '/api/auth/logout') return handleLogout(req, res);
     if (method === 'GET' && pathname === '/api/auth/me') return handleMe(req, res);
     if (method === 'PUT' && pathname === '/api/auth/profile') return await handleProfile(req, res);
+    if (method === 'PUT' && pathname === '/api/auth/avatar') return await handleUpdateAvatar(req, res);
     if (method === 'PUT' && pathname === '/api/auth/password') return await handleChangePassword(req, res);
     if (method === 'DELETE' && pathname === '/api/auth/account') return handleDeleteAccount(req, res);
     if (method === 'POST' && pathname === '/api/auth/forgot') return await handleForgotPassword(req, res);
@@ -1270,6 +1369,7 @@ const server = http.createServer(async (req, res) => {
     if (method === 'GET' && pathname === '/api/settings') return handleGetSettings(req, res);
     if (method === 'GET' && pathname === '/api/settings/api-key') return handleRevealApiKey(req, res);
     if (method === 'PUT' && pathname === '/api/settings') return await handlePutSettings(req, res);
+    if (method === 'POST' && pathname === '/api/settings/test') return await handleTestConnection(req, res);
 
     if (method === 'POST' && pathname === '/api/title') return await handleTitle(req, res);
     if (method === 'GET' && pathname.startsWith('/api/files/')) {

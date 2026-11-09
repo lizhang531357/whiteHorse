@@ -1,0 +1,56 @@
+@import '../../styles/theme.less';
+
+.stage {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.viewport {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  overflow: hidden;
+  background: #000;
+  border-radius: 12px;
+  cursor: grab;
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  .image {
+    position: absolute;
+    max-width: none;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border: 2px dashed rgba(255, 255, 255, 0.7);
+      border-radius: 50%;
+    }
+  }
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+
+  .zoomLabel {
+    flex-shrink: 0;
+    color: @text-soft;
+    font-size: 13px;
+  }
+}

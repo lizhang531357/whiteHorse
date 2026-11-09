@@ -81,8 +81,8 @@ const AppLayout = ({ children }) => {
             }}
           >
             <Button type="text" block className={styles.mine}>
-              <Avatar size={28} style={{ background: user.color }}>
-                {String(user.name || 'U').slice(0, 1).toUpperCase()}
+              <Avatar size={28} src={user.avatar || undefined} style={{ background: user.color }}>
+                {!user.avatar && String(user.name || 'U').slice(0, 1).toUpperCase()}
               </Avatar>
               {!isCollapsed && <span className={styles.mineName}>{user.name}</span>}
             </Button>

@@ -33,6 +33,8 @@ export const api = {
   register: (payload: unknown) => request('/api/auth/register', { method: 'POST', body: payload }),
   logout: () => request('/api/auth/logout', { method: 'POST', body: {} }),
   updateProfile: (patch: unknown) => request('/api/auth/profile', { method: 'PUT', body: patch }),
+  updateAvatar: (avatar: string) =>
+    request('/api/auth/avatar', { method: 'PUT', body: { avatar } }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request('/api/auth/password', {
       method: 'PUT',
@@ -45,6 +47,8 @@ export const api = {
   getSettings: () => request('/api/settings'),
   updateSettings: (patch: unknown) => request('/api/settings', { method: 'PUT', body: patch }),
   revealApiKey: () => request('/api/settings/api-key'),
+  testConnection: (payload: unknown) =>
+    request('/api/settings/test', { method: 'POST', body: payload }),
   deleteAccount: () => request('/api/auth/account', { method: 'DELETE' }),
   getConversations: () => request('/api/conversations'),
   deleteAllConversations: () => request('/api/conversations', { method: 'DELETE' }),

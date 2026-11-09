@@ -95,6 +95,7 @@ export const useConversations = (userId) => {
       id,
       title: title || '新对话',
       messages: [],
+      pinned: false,
       createdAt: now,
       updatedAt: now,
     }
@@ -225,6 +226,14 @@ export const useConversations = (userId) => {
     )
   }, [])
 
+  const togglePin = useCallback((convId) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === convId ? { ...conv, pinned: !conv.pinned, updatedAt: Date.now() } : conv,
+      ),
+    )
+  }, [])
+
   return {
     conversations,
     conversationsRef,
@@ -242,6 +251,7 @@ export const useConversations = (userId) => {
     truncateFrom,
     truncateAfter,
     touchConversation,
+    togglePin,
     updateMessageFiles,
     deriveTitle,
   }

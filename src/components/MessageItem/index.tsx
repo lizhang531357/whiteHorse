@@ -219,10 +219,16 @@ const MessageItem = ({
           </div>
         )}
 
-        {!isUser && !streaming && message.usage && (
+        {!isUser && !streaming && (message.model || message.usage) && (
           <div className={styles.usage}>
-            输入 {message.usage.prompt_tokens ?? '-'} · 输出{' '}
-            {message.usage.completion_tokens ?? '-'} · 共 {message.usage.total_tokens ?? '-'} tokens
+            {message.model && <span className={styles.usageModel}>{message.model}</span>}
+            {message.usage && (
+              <span>
+                输入 {message.usage.prompt_tokens ?? '-'} · 输出{' '}
+                {message.usage.completion_tokens ?? '-'} · 共 {message.usage.total_tokens ?? '-'}{' '}
+                tokens
+              </span>
+            )}
           </div>
         )}
 
