@@ -5,6 +5,7 @@ import Composer from '../../components/Composer'
 import MessageItem from '../../components/MessageItem'
 import ShareModal from '../../components/ShareModal'
 import { useChatContext } from '../../context/ChatContext'
+import { eventEmit } from '../../utils/event-bus'
 import styles from './index.module.less'
 
 const BOTTOM_THRESHOLD = 80
@@ -17,6 +18,7 @@ const Chat = () => {
     regenerate,
     editMessage,
     deleteMessage,
+    settings,
   } = useChatContext()
 
   const messages = current?.messages || []
@@ -24,7 +26,6 @@ const Chat = () => {
   const stickRef = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
-  const lastId = messages[messages.length - 1]?.id
 
   const scrollToBottom = useCallback((behavior = 'auto') => {
     const el = scrollRef.current
@@ -83,6 +84,19 @@ const Chat = () => {
     </Tooltip>
   )
 
+  const openSettings = () => {
+    eventEmit('open-settings', { tab: 'model' })
+  }
+
+  const modelHint = !settings.model && (
+    <div className={styles.modelHint}>
+      <span>还没有配置模型，请先在「系统设置 → 模型管理」中添加并选择模型</span>
+      <Button type="primary" size="small" onClick={openSettings}>
+        添加模型
+      </Button>
+    </div>
+  )
+
   if (!current || messages.length === 0) {
     return (
       <div className={styles.chatPage}>
@@ -92,6 +106,7 @@ const Chat = () => {
           <img className={styles.welcomeLogo} src="/logo.svg" alt="白马AI" />
           <h1>{greeting}，有什么可以帮到你吗？</h1>
           <p className={styles.subtitle}>可以上传文档、图片，或直接粘贴网页链接，Enter 发送</p>
+          {modelHint}
 
           <Composer key={currentId || 'new'} />
         </div>
@@ -104,6 +119,7 @@ const Chat = () => {
   return (
     <div className={styles.chatPage}>
       {shareButton}
+      {modelHint && <div className={styles.modelHintBar}>{modelHint}</div>}
 
       <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
         <div className={styles.messageList}>
@@ -111,7 +127,7 @@ const Chat = () => {
             <MessageItem
               key={message.id}
               message={message}
-              streaming={loading && message.id === lastId && message.role === 'assistant'}
+              streaming={message.role === 'assistant' && message.status === 'streaming'}
               canOperate={!loading}
               onRegenerate={regenerate}
               onEdit={editMessage}

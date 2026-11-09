@@ -47,6 +47,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS user_settings (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     model TEXT NOT NULL DEFAULT '',
+    models TEXT NOT NULL DEFAULT '[]',
     base_url TEXT NOT NULL DEFAULT '',
     temperature REAL NOT NULL DEFAULT 0.7,
     system_prompt TEXT NOT NULL DEFAULT '',
@@ -79,6 +80,11 @@ db.exec(`
 const settingsColumns = db.prepare('PRAGMA table_info(user_settings)').all().map((column) => column.name);
 if (!settingsColumns.includes('base_url')) {
   db.exec("ALTER TABLE user_settings ADD COLUMN base_url TEXT NOT NULL DEFAULT ''");
+}
+
+// 旧库补 models 字段（模型列表）
+if (!settingsColumns.includes('models')) {
+  db.exec("ALTER TABLE user_settings ADD COLUMN models TEXT NOT NULL DEFAULT '[]'");
 }
 
 // 旧库补会话置顶字段
@@ -135,10 +141,11 @@ const stmts = {
   `),
   getSettings: db.prepare('SELECT * FROM user_settings WHERE user_id = ?'),
   upsertSettings: db.prepare(`
-    INSERT INTO user_settings (user_id, model, base_url, temperature, system_prompt, api_key, updated_at)
-    VALUES (@userId, @model, @baseUrl, @temperature, @systemPrompt, @apiKey, @updatedAt)
+    INSERT INTO user_settings (user_id, model, models, base_url, temperature, system_prompt, api_key, updated_at)
+    VALUES (@userId, @model, @models, @baseUrl, @temperature, @systemPrompt, @apiKey, @updatedAt)
     ON CONFLICT(user_id) DO UPDATE SET
       model = excluded.model,
+      models = excluded.models,
       base_url = excluded.base_url,
       temperature = excluded.temperature,
       system_prompt = excluded.system_prompt,
@@ -336,10 +343,32 @@ export function deleteAllFiles(userId) {
   db.prepare('DELETE FROM files WHERE user_id = ?').run(userId);
 }
 
+export function normalizeModels(input) {
+  const seen = new Set();
+  const list = [];
+  for (const item of Array.isArray(input) ? input : []) {
+    const value = String(item || '').trim().slice(0, 64);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    list.push(value);
+    if (list.length >= 20) break;
+  }
+  return list;
+}
+
+export function parseModels(value) {
+  try {
+    return normalizeModels(JSON.parse(value || '[]'));
+  } catch {
+    return [];
+  }
+}
+
 export function saveSettings(userId, settings) {
   stmts.upsertSettings.run({
     userId,
     model: String(settings.model || '').slice(0, 64),
+    models: JSON.stringify(normalizeModels(settings.models)),
     baseUrl: String(settings.baseUrl || '').slice(0, 300),
     temperature: Number.isFinite(Number(settings.temperature))
       ? Math.min(2, Math.max(0, Number(settings.temperature)))

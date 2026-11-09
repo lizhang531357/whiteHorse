@@ -124,7 +124,7 @@
 
       .row {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 24px;
         min-height: 54px;
         padding: 12px 0;
@@ -134,8 +134,16 @@
           border-bottom: none;
         }
 
-        &.rowInput .rowLabel {
-          padding-top: 5px;
+        &.rowNoBorder {
+          border-bottom: none;
+        }
+
+        &.rowInput {
+          align-items: flex-start;
+
+          .rowLabel {
+            padding-top: 5px;
+          }
         }
 
         .rowLabel {
@@ -219,6 +227,18 @@
             }
           }
 
+          .modelAdd {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            max-width: 360px;
+
+            :global(.ant-input-affix-wrapper),
+            :global(.ant-input) {
+              width: 100%;
+            }
+          }
+
           .controlCol {
             display: flex;
             flex-direction: column;
@@ -263,11 +283,29 @@
 
             :global(.ant-btn-link) {
               height: auto;
-              padding: 0;
             }
 
             .muted {
               color: @text-soft;
+            }
+          }
+
+          .inlineEdit {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            max-width: 400px;
+
+            .inlineInput {
+              flex: 1;
+              min-width: 0;
+            }
+
+            /* 静默出现：禁用 antd 自带的 0.3s 过渡 */
+            :global(.ant-input),
+            :global(.ant-btn) {
+              transition: none;
             }
           }
 
@@ -347,6 +385,65 @@
           margin-bottom: 8px;
           color: @text;
           font-size: 14px;
+        }
+      }
+
+      .modelList {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 6px;
+        background: @surface-weak;
+        border: 1px solid @border;
+        border-radius: 10px;
+
+        .modelEmpty {
+          padding: 6px 8px;
+          color: @text-soft;
+          font-size: 13px;
+        }
+
+        .modelItem {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: background 0.15s;
+
+          &:hover {
+            background: @surface;
+          }
+
+          &.modelActive {
+            background: @accent-weak;
+          }
+
+          .modelRadio {
+            flex-shrink: 0;
+          }
+
+          .modelName {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            color: @text;
+            font-size: 13px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+          }
+
+          .modelRemove {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            color: @text-soft;
+
+            &:hover {
+              color: @danger;
+            }
+          }
         }
       }
 

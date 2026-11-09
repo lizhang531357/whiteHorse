@@ -12,6 +12,16 @@
     }
   }
 
+  .pendingQueue {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    color: @text-soft;
+    font-size: 12px;
+    user-select: none;
+  }
+
   .dropHint {
     position: absolute;
     inset: -8px;
@@ -84,7 +94,7 @@
 
   .composer {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
     padding: 8px 10px;
     background: @input-bg;

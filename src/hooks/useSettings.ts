@@ -19,6 +19,11 @@ export const useSettings = (userId) => {
         if (cancelled) return
         setSettings({
           model: data.model || '',
+          models: Array.isArray(data.models)
+            ? data.models
+            : data.model
+              ? [data.model]
+              : [],
           baseUrl: data.baseUrl || '',
           temperature: Number.isFinite(Number(data.temperature)) ? Number(data.temperature) : 0.7,
           systemPrompt: data.systemPrompt || DEFAULT_SETTINGS.systemPrompt,
@@ -52,6 +57,7 @@ export const useSettings = (userId) => {
         api
           .updateSettings({
             model: next.model,
+            models: next.models,
             baseUrl: next.baseUrl,
             temperature: next.temperature,
             systemPrompt: next.systemPrompt,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Avatar, Button, Drawer, Dropdown, Layout } from 'antd'
 import {
   LogoutOutlined,
@@ -10,6 +10,7 @@ import ConversationList from '../ConversationList'
 import UserModal from '../UserModal'
 import { useAuthContext } from '../../context/AuthContext'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { eventOn, eventOff } from '../../utils/event-bus'
 import styles from './index.module.less'
 
 const { Sider, Content } = Layout
@@ -20,6 +21,17 @@ const AppLayout = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState('general')
+
+  useEffect(() => {
+    const openSettings = (data) => {
+      const tab = data?.tab
+      if (typeof tab === 'string') setSettingsTab(tab)
+      setUserOpen(true)
+    }
+    eventOn('open-settings', openSettings)
+    return () => eventOff('open-settings', openSettings)
+  }, [])
 
   const isCollapsed = !isMobile && collapsed
 
@@ -70,6 +82,7 @@ const AppLayout = ({ children }) => {
               ],
               onClick: ({ key }) => {
                 if (key === 'settings') {
+                  setSettingsTab('general')
                   setUserOpen(true)
                   setDrawerOpen(false)
                 }
@@ -131,7 +144,7 @@ const AppLayout = ({ children }) => {
         </Drawer>
       )}
 
-      <UserModal open={userOpen} onClose={() => setUserOpen(false)} />
+      <UserModal open={userOpen} onClose={() => setUserOpen(false)} defaultTab={settingsTab} />
     </Layout>
   )
 }

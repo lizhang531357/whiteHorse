@@ -18,6 +18,7 @@ import {
   deleteConversations,
   getRawSettings,
   saveSettings,
+  parseModels,
   createFileRecord,
   getFileRecord,
   savePasswordReset,
@@ -48,7 +49,6 @@ import {
 import { isMailConfigured, sendResetCode } from './mailer.js';
 
 const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
-const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const PORT = process.env.PORT || 3001;
 const ALLOW_REGISTER = process.env.ALLOW_REGISTER !== 'false';
 
@@ -504,6 +504,7 @@ function settingsView(userId) {
   const settings = getRawSettings(userId);
   return {
     model: settings.model || '',
+    models: parseModels(settings.models),
     baseUrl: settings.base_url || '',
     temperature: settings.temperature ?? 0.7,
     systemPrompt: settings.system_prompt || '',
@@ -758,6 +759,7 @@ async function handlePutSettings(req, res) {
 
   saveSettings(user.id, {
     model: typeof body.model === 'string' ? body.model : current.model,
+    models: Array.isArray(body.models) ? body.models : parseModels(current.models),
     baseUrl,
     temperature:
       body.temperature === undefined ? current.temperature : Number(body.temperature),
@@ -808,24 +810,11 @@ async function handleTestConnection(req, res) {
       : current.api_key;
   if (!apiKey) return sendError(res, 400, '请先填写 API Key', { field: 'apiKey' });
 
-  const model = (typeof body.model === 'string' && body.model.trim()) || current.model || MODEL;
+  const model = (typeof body.model === 'string' && body.model.trim()) || current.model || '';
+  if (!model) return sendError(res, 400, '还没有配置模型，无法验证对话连通性');
 
   try {
-    const modelsRes = await fetch(`${baseUrl}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (modelsRes.ok) {
-      let models = [];
-      try {
-        const data = await modelsRes.json();
-        models = Array.isArray(data?.data) ? data.data.map((item) => item.id).filter(Boolean) : [];
-      } catch {
-        models = [];
-      }
-      return sendJson(res, 200, { ok: true, models: models.slice(0, 50) });
-    }
-
-    // 部分服务不实现 /models，退回一次最小对话请求
+    // 用当前选中的模型发一条最小对话请求，验证「地址+密钥+模型」整体可用
     const chatRes = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -849,7 +838,26 @@ async function handleTestConnection(req, res) {
     } catch {
       detail = '';
     }
-    return sendJson(res, 200, { ok: false, error: detail || `连接失败（HTTP ${chatRes.status}）` });
+
+    // 将常见原始报错映射为语义化提示
+    const text = String(detail);
+    let friendly = '';
+    if (chatRes.status === 401 || /invalid.*key|unauthorized|authentication/i.test(text)) {
+      friendly = 'API 密钥无效或已过期，请检查 API Key';
+    } else if (/no available channel|not found|does not exist|无可用渠道|模型不存在/i.test(text)) {
+      friendly = `当前模型「${model}」无法使用，请检查模型名称是否正确`;
+    } else if (chatRes.status === 429 || /rate.?limit|quota|insufficient/i.test(text)) {
+      friendly = '请求过于频繁或额度不足，请稍后重试';
+    } else if (chatRes.status === 404) {
+      friendly = '接口地址不正确，请检查接口地址';
+    } else if (chatRes.status >= 500) {
+      friendly = '模型服务暂时不可用，请稍后重试';
+    }
+
+    return sendJson(res, 200, {
+      ok: false,
+      error: friendly || detail || `连接失败（HTTP ${chatRes.status}）`,
+    });
   } catch (err) {
     return sendJson(res, 200, { ok: false, error: '连接失败：' + err.message });
   }
@@ -979,7 +987,8 @@ async function handleTitle(req, res) {
   if (!apiKey) return sendError(res, 400, '未配置 API Key');
 
   const baseUrl = (settings.base_url || BASE_URL).replace(/\/+$/, '');
-  const model = settings.model || MODEL;
+  const model = settings.model || '';
+  if (!model) return sendError(res, 400, '还没有配置模型');
   const isReasoner = /reasoner/i.test(model);
   const messages = isReasoner
     ? [{ role: 'user', content: `${TITLE_INSTRUCTION}\n\n对话内容：\n${text}` }]
@@ -1100,6 +1109,18 @@ async function handleChat(req, res) {
     return;
   }
 
+  const requested = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
+  const model =
+    typeof requested.model === 'string' && requested.model.trim()
+      ? requested.model.trim().slice(0, 64)
+      : rawSettings.model || '';
+  if (!model) {
+    sendJson(res, 400, {
+      error: '还没有配置模型，请先在「系统设置 → 模型管理」中添加并选择模型',
+    });
+    return;
+  }
+
   const attachmentsText = [];
   const urlsText = [];
   const imageUrls = [];
@@ -1148,11 +1169,6 @@ async function handleChat(req, res) {
     content.push({ type: 'image_url', image_url: { url } });
   }
 
-  const requested = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
-  const model =
-    typeof requested.model === 'string' && requested.model.trim()
-      ? requested.model.trim().slice(0, 64)
-      : rawSettings.model || MODEL;
   const isReasoner = /reasoner/i.test(model);
   const systemPrompt =
     typeof requested.systemPrompt === 'string' && requested.systemPrompt.trim()
@@ -1346,7 +1362,6 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'GET' && pathname === '/api/config') {
       sendJson(res, 200, {
-        defaultModel: MODEL,
         defaultBaseUrl: BASE_URL,
         allowRegister: ALLOW_REGISTER,
         maxFiles: 5,

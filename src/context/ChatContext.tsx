@@ -83,8 +83,11 @@ export const ChatProvider = ({ children }) => {
   } = store
 
   const [loading, setLoading] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const loadingRef = useRef(false)
   const abortRef = useRef(null)
+  const pendingRef = useRef([])
+  const sendMessageRef = useRef(null)
 
   const draftsKey = `baima:drafts:${user.id}`
   const textDraftsRef = useRef(loadJSON(draftsKey, {}))
@@ -140,6 +143,14 @@ export const ChatProvider = ({ children }) => {
   const setBusy = useCallback((value) => {
     loadingRef.current = value
     setLoading(value)
+  }, [])
+
+  const flushQueue = useCallback(() => {
+    if (loadingRef.current) return
+    const next = pendingRef.current.shift()
+    setPendingCount(pendingRef.current.length)
+    if (!next) return
+    sendMessageRef.current?.(next)
   }, [])
 
   useEffect(() => {
@@ -335,11 +346,13 @@ export const ChatProvider = ({ children }) => {
         if (content && !streamError && !controller.signal.aborted) {
           maybeAutoTitle(convId, content)
         }
+        flushQueue()
       }
     },
     [
       appendMessages,
       deleteMessage,
+      flushQueue,
       maybeAutoTitle,
       patchMessage,
       setBusy,
@@ -351,9 +364,15 @@ export const ChatProvider = ({ children }) => {
 
   const sendMessage = useCallback(
     async ({ text, files = [] }) => {
-      if (loadingRef.current) return
       const trimmed = String(text || '').trim()
       if (!trimmed && files.length === 0) return
+
+      // 正在生成时先排队，当前回答结束后自动发送
+      if (loadingRef.current) {
+        pendingRef.current.push({ text: trimmed, files })
+        setPendingCount(pendingRef.current.length)
+        return
+      }
 
       let convId = currentId
       let history = []
@@ -438,6 +457,8 @@ export const ChatProvider = ({ children }) => {
 
       const lastUser = before[userIndex]
       const history = toHistory(before.slice(0, userIndex))
+      // 暂存该消息之后的内容，重新生成完成后恢复，避免丢失后续对话
+      const rest = conv.messages.slice(index + 1)
       truncateFrom(conv.id, messageId)
       await startAssistant({
         convId: conv.id,
@@ -446,8 +467,11 @@ export const ChatProvider = ({ children }) => {
         attachments: [],
         userMsgId: lastUser.id,
       })
+      if (rest.length) {
+        appendMessages(conv.id, rest)
+      }
     },
-    [conversationsRef, current?.id, startAssistant, truncateFrom],
+    [conversationsRef, current?.id, appendMessages, startAssistant, truncateFrom],
   )
 
   const editMessage = useCallback(
@@ -478,7 +502,13 @@ export const ChatProvider = ({ children }) => {
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
+    pendingRef.current = []
+    setPendingCount(0)
   }, [])
+
+  useEffect(() => {
+    sendMessageRef.current = sendMessage
+  }, [sendMessage])
 
   const value = {
     user,
@@ -494,6 +524,7 @@ export const ChatProvider = ({ children }) => {
     ...store,
     current,
     loading,
+    pendingCount,
     sendMessage,
     regenerate,
     editMessage,

@@ -3,6 +3,7 @@ import { Button, Input, Tag, Tooltip, Upload, message as antdMessage } from 'ant
 import {
   ArrowUpOutlined,
   AudioOutlined,
+  ClockCircleOutlined,
   FileTextOutlined,
   PaperClipOutlined,
   PictureOutlined,
@@ -18,7 +19,8 @@ const ACCEPT =
   '.txt,.md,.markdown,.json,.jsonl,.csv,.tsv,.log,.xml,.yml,.yaml,.js,.jsx,.ts,.tsx,.css,.less,.scss,.html,.htm,.vue,.py,.java,.kt,.c,.h,.cpp,.hpp,.cs,.go,.rs,.rb,.php,.swift,.dart,.sql,.sh,.bash,.zsh,.env,.ini,.toml,.conf,.pdf,.docx,.jpg,.jpeg,.png,.gif,.webp,.bmp'
 
 const Composer = () => {
-  const { sendMessage, stop, loading, currentId, getDraft, setDraft, clearDraft } = useChatContext()
+  const { sendMessage, stop, loading, pendingCount, currentId, getDraft, setDraft, clearDraft } =
+    useChatContext()
   const draftKey = currentId || 'new'
   const initialDraft = getDraft(draftKey)
 
@@ -78,12 +80,13 @@ const Composer = () => {
 
   const handleSend = async () => {
     const text = input.trim()
-    if ((!text && files.length === 0) || loading) return
+    if (!text && files.length === 0) return
     const sentFiles = files
     clearDraft(draftKey)
     setInput('')
     setFiles([])
     await sendMessage({ text, files: sentFiles })
+    if (loading) antdMessage.success('已加入队列，回答完成后自动发送')
   }
 
   const handlePressEnter = (e) => {
@@ -221,28 +224,36 @@ const Composer = () => {
           </Tooltip>
         )}
 
-        {loading ? (
-          <Tooltip title="停止生成">
+        {loading && (
+          <Tooltip title="停止生成，同时清空排队消息">
             <Button
-              type="primary"
+              type="text"
               shape="circle"
               danger
+              className={styles.iconBtn}
               icon={<StopOutlined />}
               onClick={stop}
               aria-label="停止生成"
             />
           </Tooltip>
-        ) : (
-          <Button
-            type="primary"
-            shape="circle"
-            icon={<ArrowUpOutlined />}
-            disabled={!input.trim() && files.length === 0}
-            onClick={handleSend}
-            aria-label="发送"
-          />
         )}
+
+        <Button
+          type="primary"
+          shape="circle"
+          icon={<ArrowUpOutlined />}
+          disabled={!input.trim() && files.length === 0}
+          onClick={handleSend}
+          aria-label={loading ? '加入队列' : '发送'}
+        />
       </div>
+
+      {pendingCount > 0 && (
+        <div className={styles.pendingQueue}>
+          <ClockCircleOutlined />
+          {pendingCount} 条消息排队中，回答完成后自动发送
+        </div>
+      )}
     </div>
   )
 }
