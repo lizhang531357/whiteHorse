@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { deriveTitle } from '../utils/title'
 import { uid } from '../utils/id'
 import { loadJSON, saveJSON } from '../utils/storage'
 import { api } from '../utils/api'
@@ -239,7 +238,6 @@ export const useConversations = (userId) => {
     conversationsRef,
     current,
     currentId,
-    loaded,
     createConversation,
     selectConversation,
     renameConversation,
@@ -253,6 +251,5 @@ export const useConversations = (userId) => {
     touchConversation,
     togglePin,
     updateMessageFiles,
-    deriveTitle,
   }
 }

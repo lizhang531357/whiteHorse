@@ -40,42 +40,7 @@ export interface Conversation {
   updatedAt: number
 }
 
-export interface User {
-  id: string
-  name: string
-  email: string
-  color: string
-  avatar?: string
-  createdAt?: number
-}
-
-export interface Settings {
-  model: string
-  baseUrl: string
-  temperature: number
-  systemPrompt: string
-}
-
-export interface PendingFile {
-  uid: string
-  name: string
-  size: number
-  type: string
-  file: File
-  preview: string
-}
-
-export interface Draft {
-  text: string
-  files: PendingFile[]
-}
-
 export interface ApiError extends Error {
   status?: number
   field?: string
-}
-
-export interface ServerSettings extends Settings {
-  hasApiKey: boolean
-  apiKeyMasked: string
 }

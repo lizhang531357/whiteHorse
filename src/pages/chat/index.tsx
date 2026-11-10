@@ -25,6 +25,7 @@ const Chat = () => {
   const messages = current?.messages || []
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
+  const lastUserIdRef = useRef<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -39,7 +40,6 @@ const Chat = () => {
     [messages],
   )
 
-
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollRef.current
     if (!el) return
@@ -48,12 +48,16 @@ const Chat = () => {
     setAtBottom(true)
   }, [])
 
-
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const last = messages[messages.length - 1]
-    if (last?.role === 'user') stickRef.current = true
+    // 用户消息和 AI 占位消息可能在同一批渲染里到达，
+    // 因此用「最后一条用户消息 id」判断是否是新发送，而不是只看最后一条消息角色。
+    const lastUser = [...messages].reverse().find((item) => item.role === 'user')
+    if (lastUser && lastUser.id !== lastUserIdRef.current) {
+      lastUserIdRef.current = lastUser.id
+      stickRef.current = true
+    }
     if (stickRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
 

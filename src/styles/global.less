@@ -73,6 +73,46 @@ html body {
   background: @accent-weak;
 }
 
+// 统一灰色滚动条（半透明，悬停加深）
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.18);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.32);
+}
+
+:root[data-theme='dark'] {
+  * {
+    scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.36);
+  }
+}
+
 // 统一所有 antd 按钮的圆角（排除圆形按钮）
 .ant-btn:not(.ant-btn-circle):not(.ant-btn-round) {
   border-radius: 8px;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import darkCssUrl from 'antd/dist/antd.dark.css?url'
 import { loadString, saveString } from '../utils/storage'
 
@@ -28,9 +28,5 @@ export const useTheme = () => {
     saveString(THEME_KEY, theme)
   }, [theme])
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
-  }, [])
-
-  return { theme, setTheme, toggleTheme, isDark: theme === 'dark' }
+  return { theme, setTheme }
 }

@@ -479,9 +479,10 @@ function saveUploadedFile(userId, name, type, buffer) {
   try {
     const id = crypto.randomUUID();
     const ext = safeExtOf(name);
-    const dir = path.join(uploadsDir, userId);
+    const userDir = String(userId);
+    const dir = path.join(uploadsDir, userDir);
     fs.mkdirSync(dir, { recursive: true });
-    const relativePath = path.join(userId, `${id}${ext}`);
+    const relativePath = path.join(userDir, `${id}${ext}`);
     fs.writeFileSync(path.join(uploadsDir, relativePath), buffer);
 
     const displayName = String(name || '未命名附件').slice(0, 200);
@@ -535,7 +536,6 @@ async function handleRegister(req, res) {
   }
 
   const user = createUser({
-    id: crypto.randomUUID(),
     name,
     email,
     passwordHash: hashPassword(password),
@@ -870,7 +870,7 @@ function handleDeleteAllConversations(req, res) {
   deleteAllConversations(user.id);
   deleteAllFiles(user.id);
   try {
-    fs.rmSync(path.join(uploadsDir, user.id), { recursive: true, force: true });
+    fs.rmSync(path.join(uploadsDir, String(user.id)), { recursive: true, force: true });
   } catch {
     // 附件目录可能不存在
   }
@@ -883,7 +883,7 @@ function handleDeleteAccount(req, res) {
   if (!user) return;
 
   try {
-    fs.rmSync(path.join(uploadsDir, user.id), { recursive: true, force: true });
+    fs.rmSync(path.join(uploadsDir, String(user.id)), { recursive: true, force: true });
   } catch {
     // 附件目录可能不存在
   }
@@ -920,7 +920,7 @@ function getPublicUrl(req) {
 
 function handleShare(req, res) {
   const url = getPublicUrl(req)
-  sendJson(res, 200, { url, available: Boolean(url) })
+  sendJson(res, 200, { url })
 }
 
 function handleExport(req, res) {
@@ -1364,8 +1364,6 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         defaultBaseUrl: BASE_URL,
         allowRegister: ALLOW_REGISTER,
-        maxFiles: 5,
-        maxFileSize: MAX_FILE_BYTES,
       });
       return;
     }
