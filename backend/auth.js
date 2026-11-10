@@ -65,7 +65,7 @@ export function getSessionToken(req) {
   return parseCookies(req)[COOKIE_NAME] || '';
 }
 
-export function getAuthUser(req) {
+export async function getAuthUser(req) {
   return getUserBySession(getSessionToken(req));
 }
 

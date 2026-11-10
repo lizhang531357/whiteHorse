@@ -455,8 +455,8 @@ async function readJsonBody(req, res) {
   }
 }
 
-function requireUser(req, res) {
-  const user = getAuthUser(req);
+async function requireUser(req, res) {
+  const user = await getAuthUser(req);
   if (!user) {
     sendError(res, 401, '请先登录');
     return null;
@@ -475,7 +475,7 @@ function safeExtOf(name = '') {
   return match ? `.${match[1].toLowerCase()}` : '';
 }
 
-function saveUploadedFile(userId, name, type, buffer) {
+async function saveUploadedFile(userId, name, type, buffer) {
   try {
     const id = crypto.randomUUID();
     const ext = safeExtOf(name);
@@ -487,7 +487,14 @@ function saveUploadedFile(userId, name, type, buffer) {
 
     const displayName = String(name || '未命名附件').slice(0, 200);
     const mime = String(type || 'application/octet-stream').slice(0, 120);
-    createFileRecord({ id, userId, name: displayName, size: buffer.length, mime, path: relativePath });
+    await createFileRecord({
+      id,
+      userId,
+      name: displayName,
+      size: buffer.length,
+      mime,
+      path: relativePath,
+    });
 
     return { id, name: displayName, size: buffer.length, type: mime };
   } catch {
@@ -501,8 +508,8 @@ function maskKey(key = '') {
   return `${key.slice(0, 4)}••••••${key.slice(-4)}`;
 }
 
-function settingsView(userId) {
-  const settings = getRawSettings(userId);
+async function settingsView(userId) {
+  const settings = await getRawSettings(userId);
   return {
     model: settings.model || '',
     models: parseModels(settings.models),
@@ -531,11 +538,11 @@ async function handleRegister(req, res) {
     return sendError(res, 400, '请输入有效邮箱', { field: 'email' });
   }
   if (password.length < 6) return sendError(res, 400, '密码至少 6 位', { field: 'password' });
-  if (getUserByEmail(email)) {
+  if (await getUserByEmail(email)) {
     return sendError(res, 409, '该邮箱已注册，请直接登录', { field: 'email' });
   }
 
-  const user = createUser({
+  const user = await createUser({
     name,
     email,
     passwordHash: hashPassword(password),
@@ -544,7 +551,7 @@ async function handleRegister(req, res) {
   });
 
   const token = createToken();
-  createSession(token, user.id, SESSION_TTL_MS);
+  await createSession(token, user.id, SESSION_TTL_MS);
   setSessionCookie(res, token);
   sendJson(res, 200, { user: publicUser(user) });
 }
@@ -555,7 +562,7 @@ async function handleLogin(req, res) {
 
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
-  const user = email ? getUserByEmail(email) : null;
+  const user = email ? await getUserByEmail(email) : null;
 
   if (!user) {
     return sendError(res, 404, '该邮箱尚未注册，请先注册', { field: 'email' });
@@ -565,26 +572,26 @@ async function handleLogin(req, res) {
   }
 
   const token = createToken();
-  createSession(token, user.id, SESSION_TTL_MS);
+  await createSession(token, user.id, SESSION_TTL_MS);
   setSessionCookie(res, token);
   sendJson(res, 200, { user: publicUser(user) });
 }
 
-function handleLogout(req, res) {
+async function handleLogout(req, res) {
   const token = getSessionToken(req);
-  if (token) deleteSession(token);
+  if (token) await deleteSession(token);
   clearSessionCookie(res);
   sendJson(res, 200, { ok: true });
 }
 
-function handleMe(req, res) {
-  const user = getAuthUser(req);
+async function handleMe(req, res) {
+  const user = await getAuthUser(req);
   if (!user) return sendError(res, 401, '未登录');
   sendJson(res, 200, { user: publicUser(user) });
 }
 
 async function handleProfile(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
@@ -596,15 +603,15 @@ async function handleProfile(req, res) {
   if (!name) return sendError(res, 400, '昵称不能为空');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return sendError(res, 400, '请输入有效邮箱');
 
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing && existing.id !== user.id) return sendError(res, 409, '该邮箱已被使用');
 
-  const updated = updateUserProfile(user.id, name, email);
+  const updated = await updateUserProfile(user.id, name, email);
   sendJson(res, 200, { user: publicUser(updated) });
 }
 
 async function handleUpdateAvatar(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
@@ -620,12 +627,12 @@ async function handleUpdateAvatar(req, res) {
     }
   }
 
-  const updated = updateUserAvatar(user.id, avatar);
+  const updated = await updateUserAvatar(user.id, avatar);
   sendJson(res, 200, { user: publicUser(updated) });
 }
 
 async function handleChangePassword(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
@@ -644,9 +651,9 @@ async function handleChangePassword(req, res) {
     return sendError(res, 400, '新密码不能与当前密码相同', { field: 'newPassword' });
   }
 
-  updateUserPassword(user.id, hashPassword(newPassword));
+  await updateUserPassword(user.id, hashPassword(newPassword));
   // 其它设备上的登录失效，当前设备保持登录
-  deleteUserSessions(user.id, getSessionToken(req));
+  await deleteUserSessions(user.id, getSessionToken(req));
   sendJson(res, 200, { ok: true });
 }
 
@@ -657,7 +664,7 @@ async function handleForgotPassword(req, res) {
   const email = String(body.email || '').trim().toLowerCase();
   if (!email) return sendError(res, 400, '请输入邮箱', { field: 'email' });
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   const mailReady = isMailConfigured();
 
   if (!user) {
@@ -668,7 +675,7 @@ async function handleForgotPassword(req, res) {
 
   const code = createResetCode();
   const salt = createSalt();
-  savePasswordReset(user.id, hashResetCode(code, salt), salt, Date.now() + 10 * 60 * 1000);
+  await savePasswordReset(user.id, hashResetCode(code, salt), salt, Date.now() + 10 * 60 * 1000);
 
   let sent = false;
   try {
@@ -698,44 +705,44 @@ async function handleResetPassword(req, res) {
     return sendError(res, 400, '新密码至少 6 位', { field: 'newPassword' });
   }
 
-  const user = getUserByEmail(email);
-  const reset = user ? getPasswordReset(user.id) : null;
+  const user = await getUserByEmail(email);
+  const reset = user ? await getPasswordReset(user.id) : null;
   const invalid = () => sendError(res, 400, '验证码错误或已过期', { field: 'code' });
 
   if (!user || !reset) return invalid();
   if (reset.expires_at <= Date.now()) {
-    deletePasswordReset(user.id);
+    await deletePasswordReset(user.id);
     return invalid();
   }
   if (reset.attempts >= 5) {
-    deletePasswordReset(user.id);
+    await deletePasswordReset(user.id);
     return invalid();
   }
   if (!verifyResetCode(code, reset.salt, reset.code_hash)) {
-    incrementPasswordResetAttempts(user.id);
+    await incrementPasswordResetAttempts(user.id);
     return invalid();
   }
 
-  updateUserPassword(user.id, hashPassword(newPassword));
-  deletePasswordReset(user.id);
-  deleteUserSessions(user.id);
+  await updateUserPassword(user.id, hashPassword(newPassword));
+  await deletePasswordReset(user.id);
+  await deleteUserSessions(user.id);
   sendJson(res, 200, { ok: true });
 }
 
-function handleGetSettings(req, res) {
-  const user = requireUser(req, res);
+async function handleGetSettings(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
-  sendJson(res, 200, settingsView(user.id));
+  sendJson(res, 200, await settingsView(user.id));
 }
 
 async function handlePutSettings(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
   if (!body) return;
 
-  const current = getRawSettings(user.id);
+  const current = await getRawSettings(user.id);
   let apiKey = current.api_key || '';
   if (body.clearApiKey === true) {
     apiKey = '';
@@ -757,7 +764,7 @@ async function handlePutSettings(req, res) {
     }
   }
 
-  saveSettings(user.id, {
+  await saveSettings(user.id, {
     model: typeof body.model === 'string' ? body.model : current.model,
     models: Array.isArray(body.models) ? body.models : parseModels(current.models),
     baseUrl,
@@ -768,14 +775,14 @@ async function handlePutSettings(req, res) {
     apiKey,
   });
 
-  sendJson(res, 200, settingsView(user.id));
+  sendJson(res, 200, await settingsView(user.id));
 }
 
-function handleRevealApiKey(req, res) {
-  const user = requireUser(req, res);
+async function handleRevealApiKey(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
 
-  const settings = getRawSettings(user.id);
+  const settings = await getRawSettings(user.id);
   if (!settings.api_key) return sendError(res, 404, '还没有配置 API Key');
 
   res.setHeader('Cache-Control', 'no-store');
@@ -783,13 +790,13 @@ function handleRevealApiKey(req, res) {
 }
 
 async function handleTestConnection(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
   if (!body) return;
 
-  const current = getRawSettings(user.id);
+  const current = await getRawSettings(user.id);
   const rawBaseUrl =
     typeof body.baseUrl === 'string' && body.baseUrl.trim()
       ? body.baseUrl.trim()
@@ -863,12 +870,12 @@ async function handleTestConnection(req, res) {
   }
 }
 
-function handleDeleteAllConversations(req, res) {
-  const user = requireUser(req, res);
+async function handleDeleteAllConversations(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
 
-  deleteAllConversations(user.id);
-  deleteAllFiles(user.id);
+  await deleteAllConversations(user.id);
+  await deleteAllFiles(user.id);
   try {
     fs.rmSync(path.join(uploadsDir, String(user.id)), { recursive: true, force: true });
   } catch {
@@ -878,8 +885,8 @@ function handleDeleteAllConversations(req, res) {
   sendJson(res, 200, { ok: true });
 }
 
-function handleDeleteAccount(req, res) {
-  const user = requireUser(req, res);
+async function handleDeleteAccount(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
 
   try {
@@ -888,7 +895,7 @@ function handleDeleteAccount(req, res) {
     // 附件目录可能不存在
   }
 
-  deleteUser(user.id);
+  await deleteUser(user.id);
   clearSessionCookie(res);
   sendJson(res, 200, { ok: true });
 }
@@ -923,11 +930,11 @@ function handleShare(req, res) {
   sendJson(res, 200, { url })
 }
 
-function handleExport(req, res) {
-  const user = requireUser(req, res);
+async function handleExport(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
 
-  const settings = getRawSettings(user.id);
+  const settings = await getRawSettings(user.id);
   const payload = {
     exportedAt: new Date().toISOString(),
     user: publicUser(user),
@@ -937,7 +944,7 @@ function handleExport(req, res) {
       systemPrompt: settings.system_prompt,
       hasApiKey: Boolean(settings.api_key),
     },
-    conversations: listConversations(user.id),
+    conversations: await listConversations(user.id),
   };
 
   res.writeHead(200, {
@@ -947,11 +954,11 @@ function handleExport(req, res) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
-function handleFileDownload(req, res, fileId) {
-  const user = requireUser(req, res);
+async function handleFileDownload(req, res, fileId) {
+  const user = await requireUser(req, res);
   if (!user) return;
 
-  const record = getFileRecord(fileId, user.id);
+  const record = await getFileRecord(fileId, user.id);
   if (!record) return sendError(res, 404, '文件不存在');
 
   const filePath = path.resolve(uploadsDir, record.path);
@@ -973,7 +980,7 @@ const TITLE_INSTRUCTION =
   '你是一个标题生成助手。根据下面的对话内容，生成一个不超过 12 个字符的简短标题。只输出标题，不要引号、标点或解释。';
 
 async function handleTitle(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
@@ -982,7 +989,7 @@ async function handleTitle(req, res) {
   const text = String(body.text || '').trim().slice(0, 2000);
   if (!text) return sendError(res, 400, '内容为空');
 
-  const settings = getRawSettings(user.id);
+  const settings = await getRawSettings(user.id);
   const apiKey = (settings.api_key || '').trim();
   if (!apiKey) return sendError(res, 400, '未配置 API Key');
 
@@ -1036,14 +1043,14 @@ async function handleTitle(req, res) {
   }
 }
 
-function handleGetConversations(req, res) {
-  const user = requireUser(req, res);
+async function handleGetConversations(req, res) {
+  const user = await requireUser(req, res);
   if (!user) return;
-  sendJson(res, 200, { conversations: listConversations(user.id) });
+  sendJson(res, 200, { conversations: await listConversations(user.id) });
 }
 
 async function handleSyncConversations(req, res) {
-  const user = requireUser(req, res);
+  const user = await requireUser(req, res);
   if (!user) return;
 
   const body = await readJsonBody(req, res);
@@ -1064,20 +1071,20 @@ async function handleSyncConversations(req, res) {
       updatedAt: conv.updatedAt,
     }));
 
-  upsertConversations(user.id, safeUpserts);
-  deleteConversations(user.id, deletes);
+  await upsertConversations(user.id, safeUpserts);
+  await deleteConversations(user.id, deletes);
 
   sendJson(res, 200, { ok: true });
 }
 
 async function handleChat(req, res) {
-  const authUser = getAuthUser(req);
+  const authUser = await getAuthUser(req);
   if (!authUser) {
     sendError(res, 401, '请先登录');
     return;
   }
 
-  const rawSettings = getRawSettings(authUser.id);
+  const rawSettings = await getRawSettings(authUser.id);
   const baseUrl = (rawSettings.base_url || BASE_URL).replace(/\/+$/, '');
   const apiKey = (rawSettings.api_key || '').trim();
   if (!apiKey) {
@@ -1136,7 +1143,7 @@ async function handleChat(req, res) {
       const buffer = Buffer.from(attachment.data, 'base64');
       if (buffer.length > MAX_FILE_BYTES) throw new Error('文件超过 8MB');
 
-      saved = saveUploadedFile(authUser.id, name, type, buffer);
+      saved = await saveUploadedFile(authUser.id, name, type, buffer);
 
       if (isImage(name, type)) {
         imageUrls.push(`data:${imageMime(name, type)};base64,${buffer.toString('base64')}`);
@@ -1370,31 +1377,31 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'POST' && pathname === '/api/auth/register') return await handleRegister(req, res);
     if (method === 'POST' && pathname === '/api/auth/login') return await handleLogin(req, res);
-    if (method === 'POST' && pathname === '/api/auth/logout') return handleLogout(req, res);
-    if (method === 'GET' && pathname === '/api/auth/me') return handleMe(req, res);
+    if (method === 'POST' && pathname === '/api/auth/logout') return await handleLogout(req, res);
+    if (method === 'GET' && pathname === '/api/auth/me') return await handleMe(req, res);
     if (method === 'PUT' && pathname === '/api/auth/profile') return await handleProfile(req, res);
     if (method === 'PUT' && pathname === '/api/auth/avatar') return await handleUpdateAvatar(req, res);
     if (method === 'PUT' && pathname === '/api/auth/password') return await handleChangePassword(req, res);
-    if (method === 'DELETE' && pathname === '/api/auth/account') return handleDeleteAccount(req, res);
+    if (method === 'DELETE' && pathname === '/api/auth/account') return await handleDeleteAccount(req, res);
     if (method === 'POST' && pathname === '/api/auth/forgot') return await handleForgotPassword(req, res);
     if (method === 'POST' && pathname === '/api/auth/reset') return await handleResetPassword(req, res);
 
-    if (method === 'GET' && pathname === '/api/settings') return handleGetSettings(req, res);
-    if (method === 'GET' && pathname === '/api/settings/api-key') return handleRevealApiKey(req, res);
+    if (method === 'GET' && pathname === '/api/settings') return await handleGetSettings(req, res);
+    if (method === 'GET' && pathname === '/api/settings/api-key') return await handleRevealApiKey(req, res);
     if (method === 'PUT' && pathname === '/api/settings') return await handlePutSettings(req, res);
     if (method === 'POST' && pathname === '/api/settings/test') return await handleTestConnection(req, res);
 
     if (method === 'POST' && pathname === '/api/title') return await handleTitle(req, res);
     if (method === 'GET' && pathname.startsWith('/api/files/')) {
       const fileId = decodeURIComponent(pathname.slice('/api/files/'.length));
-      return handleFileDownload(req, res, fileId);
+      return await handleFileDownload(req, res, fileId);
     }
 
     if (method === 'GET' && pathname === '/api/share') return handleShare(req, res);
-    if (method === 'GET' && pathname === '/api/export') return handleExport(req, res);
-    if (method === 'GET' && pathname === '/api/conversations') return handleGetConversations(req, res);
+    if (method === 'GET' && pathname === '/api/export') return await handleExport(req, res);
+    if (method === 'GET' && pathname === '/api/conversations') return await handleGetConversations(req, res);
     if (method === 'DELETE' && pathname === '/api/conversations') {
-      return handleDeleteAllConversations(req, res);
+      return await handleDeleteAllConversations(req, res);
     }
     if (method === 'POST' && pathname === '/api/conversations/sync') {
       return await handleSyncConversations(req, res);
@@ -1419,8 +1426,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-cleanupSessions();
-const cleanupTimer = setInterval(cleanupSessions, 6 * 3600 * 1000);
+await cleanupSessions();
+const cleanupTimer = setInterval(() => {
+  cleanupSessions().catch((err) => console.error('[cleanup] 清理过期会话失败：', err.message));
+}, 6 * 3600 * 1000);
 cleanupTimer.unref?.();
 
 server.listen(PORT, () => {

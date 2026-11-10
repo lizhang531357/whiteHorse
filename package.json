@@ -9,14 +9,14 @@
     "share": "node scripts/share.js",
     "build": "tsc --noEmit && vite build --config config/vite.config.js",
     "typecheck": "tsc --noEmit",
-    "backup": "node scripts/backup-db.js"
+    "backup": "node --env-file=.env scripts/backup-db.js"
   },
   "dependencies": {
     "antd": "^4.24.16",
-    "better-sqlite3": "11.10.0",
     "highlight.js": "^11.10.0",
     "mammoth": "^1.8.0",
     "mitt": "^3.0.1",
+    "mysql2": "^3.11.5",
     "nodemailer": "^10.3.1",
     "pdf-parse": "^1.1.1",
     "react": "^18.3.1",
