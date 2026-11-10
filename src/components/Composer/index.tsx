@@ -224,28 +224,27 @@ const Composer = () => {
           </Tooltip>
         )}
 
-        {loading && (
+        {loading ? (
           <Tooltip title="停止生成，同时清空排队消息">
             <Button
-              type="text"
-              shape="circle"
+              type="primary"
               danger
-              className={styles.iconBtn}
+              shape="circle"
               icon={<StopOutlined />}
               onClick={stop}
               aria-label="停止生成"
             />
           </Tooltip>
+        ) : (
+          <Button
+            type="primary"
+            shape="circle"
+            icon={<ArrowUpOutlined />}
+            disabled={!input.trim() && files.length === 0}
+            onClick={handleSend}
+            aria-label="发送"
+          />
         )}
-
-        <Button
-          type="primary"
-          shape="circle"
-          icon={<ArrowUpOutlined />}
-          disabled={!input.trim() && files.length === 0}
-          onClick={handleSend}
-          aria-label={loading ? '加入队列' : '发送'}
-        />
       </div>
 
       {pendingCount > 0 && (

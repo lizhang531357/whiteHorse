@@ -1,18 +1,30 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, memo, Suspense, useMemo, useState } from 'react'
 import { Button, Image, Input, Modal, Spin, Tag, Tooltip, message as antdMessage } from 'antd'
 import {
   CheckOutlined,
   CopyOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   FileTextOutlined,
   PictureOutlined,
   ReloadOutlined,
+  RightOutlined,
 } from '@ant-design/icons'
 import { formatSize, isImageFile } from '../../utils/file'
+import type { Message } from '../../types'
 import styles from './index.module.less'
 
 const MarkdownRenderer = lazy(() => import('../MarkdownRenderer'))
+
+type MessageItemProps = {
+  message: Message
+  streaming?: boolean
+  canOperate?: boolean
+  onRegenerate?: (messageId: string) => void
+  onEdit?: (messageId: string, content: string) => void
+  onDelete?: (messageId: string) => void
+}
 
 const MessageFiles = ({ files = [] }) => {
   if (!files.length) return null
@@ -79,14 +91,14 @@ const MessageFiles = ({ files = [] }) => {
   )
 }
 
-const MessageItem = ({
+const MessageItem = memo(({
   message,
   streaming = false,
   canOperate = true,
   onRegenerate,
   onEdit,
   onDelete,
-}) => {
+}: MessageItemProps) => {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content || '')
   const [copied, setCopied] = useState(false)
@@ -168,14 +180,19 @@ const MessageItem = ({
 
         {!isUser && hasReasoning && (
           <div className={styles.reasoning}>
-            <Button
-              type="text"
-              size="small"
+            <button
+              type="button"
               className={styles.reasoningToggle}
               onClick={() => setShowReasoning((v) => !v)}
+              aria-expanded={showReasoning}
             >
-              {streaming && !message.content ? '正在思考…' : '思考过程'}
-            </Button>
+              {showReasoning ? (
+                <DownOutlined className={styles.reasoningCaret} />
+              ) : (
+                <RightOutlined className={styles.reasoningCaret} />
+              )}
+              <span>{streaming && !message.content ? '正在思考…' : '思考过程'}</span>
+            </button>
             {showReasoning && <div className={styles.reasoningBody}>{message.reasoning}</div>}
           </div>
         )}
@@ -266,6 +283,8 @@ const MessageItem = ({
       </div>
     </div>
   )
-}
+})
+
+MessageItem.displayName = 'MessageItem'
 
 export default MessageItem

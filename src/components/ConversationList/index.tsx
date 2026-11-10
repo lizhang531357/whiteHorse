@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { Button, Dropdown, Empty, Input, Modal, Tooltip, message } from 'antd'
 import type { MenuProps } from 'antd'
 import {
@@ -45,13 +45,15 @@ const ConversationList = ({ collapsed, onNavigate }) => {
   const [renameTarget, setRenameTarget] = useState<Conversation | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [keyword, setKeyword] = useState('')
+  const deferredKeyword = useDeferredValue(keyword)
+  const searchKey = deferredKeyword.trim()
 
   const sorted = useMemo(() => {
     const list = [...conversations].sort((a, b) => {
       const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
       return pinDiff || (b.updatedAt || 0) - (a.updatedAt || 0)
     })
-    const kw = keyword.trim().toLowerCase()
+    const kw = searchKey.toLowerCase()
     if (!kw) return list
 
     return list.filter((conv) => {
@@ -64,7 +66,7 @@ const ConversationList = ({ collapsed, onNavigate }) => {
         return hay.includes(kw)
       })
     })
-  }, [conversations, keyword])
+  }, [conversations, searchKey])
 
   const startRename = (conv: Conversation) => {
     setRenameTarget(conv)
@@ -154,16 +156,16 @@ const ConversationList = ({ collapsed, onNavigate }) => {
       />
 
       <div className={styles.list}>
-        {keyword.trim() && sorted.length > 0 && (
+        {searchKey && sorted.length > 0 && (
           <div className={styles.resultCount}>找到 {sorted.length} 个对话</div>
         )}
 
         {sorted.length === 0 ? (
-          keyword.trim() ? (
+          searchKey ? (
             <div className={styles.noResult}>
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={`没有找到包含「${keyword.trim()}」的对话`}
+                description={`没有找到包含「${searchKey}」的对话`}
               />
               <Button type="link" size="small" onClick={() => setKeyword('')}>
                 清除搜索

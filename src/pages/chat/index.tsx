@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Modal, Tooltip } from 'antd'
 import { DownOutlined, ShareAltOutlined } from '@ant-design/icons'
 import Composer from '../../components/Composer'
 import MessageItem from '../../components/MessageItem'
+import QuestionNav from '../../components/QuestionNav'
 import ShareModal from '../../components/ShareModal'
 import { useChatContext } from '../../context/ChatContext'
 import { eventEmit } from '../../utils/event-bus'
@@ -22,18 +23,31 @@ const Chat = () => {
   } = useChatContext()
 
   const messages = current?.messages || []
-  const scrollRef = useRef(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
   const [atBottom, setAtBottom] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
 
-  const scrollToBottom = useCallback((behavior = 'auto') => {
+  const questions = useMemo(
+    () =>
+      messages
+        .filter((item) => item.role === 'user')
+        .map((item) => ({
+          id: item.id,
+          content: item.content?.trim() || '（附件消息）',
+        })),
+    [messages],
+  )
+
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = scrollRef.current
     if (!el) return
     stickRef.current = true
     el.scrollTo({ top: el.scrollHeight, behavior })
     setAtBottom(true)
   }, [])
+
 
   useEffect(() => {
     const el = scrollRef.current
@@ -58,16 +72,19 @@ const Chat = () => {
     setAtBottom(near)
   }
 
-  const handleDelete = (messageId) => {
-    Modal.confirm({
-      title: '删除消息',
-      content: '删除后无法恢复，确定继续吗？',
-      okText: '删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: () => deleteMessage(currentId, messageId),
-    })
-  }
+  const handleDelete = useCallback(
+    (messageId) => {
+      Modal.confirm({
+        title: '删除消息',
+        content: '删除后无法恢复，确定继续吗？',
+        okText: '删除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        onOk: () => deleteMessage(currentId, messageId),
+      })
+    },
+    [currentId, deleteMessage],
+  )
 
   const hour = new Date().getHours()
   const greeting = hour >= 6 && hour < 12 ? '上午好' : hour >= 12 && hour < 18 ? '下午好' : '晚上好'
@@ -124,18 +141,25 @@ const Chat = () => {
       <div className={styles.messages} ref={scrollRef} onScroll={handleScroll}>
         <div className={styles.messageList}>
           {messages.map((message) => (
-            <MessageItem
+            <div
               key={message.id}
-              message={message}
-              streaming={message.role === 'assistant' && message.status === 'streaming'}
-              canOperate={!loading}
-              onRegenerate={regenerate}
-              onEdit={editMessage}
-              onDelete={handleDelete}
-            />
+              className={styles.messageAnchor}
+              data-question-id={message.role === 'user' ? message.id : undefined}
+            >
+              <MessageItem
+                message={message}
+                streaming={message.role === 'assistant' && message.status === 'streaming'}
+                canOperate={!loading}
+                onRegenerate={regenerate}
+                onEdit={editMessage}
+                onDelete={handleDelete}
+              />
+            </div>
           ))}
         </div>
       </div>
+
+      <QuestionNav questions={questions} containerRef={scrollRef} />
 
       {!atBottom && (
         <Button

@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { message } from 'antd'
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import 'highlight.js/styles/github-dark.css'
 import styles from './index.module.less'
 
@@ -47,7 +47,7 @@ const CodeBlock = ({ node, children, ...props }) => {
   )
 }
 
-const MarkdownRenderer = ({ content = '' }) => {
+const MarkdownRenderer = memo(({ content = '' }: { content?: string }) => {
   return (
     <div className={styles.markdown}>
       <ReactMarkdown
@@ -71,6 +71,8 @@ const MarkdownRenderer = ({ content = '' }) => {
       </ReactMarkdown>
     </div>
   )
-}
+})
+
+MarkdownRenderer.displayName = 'MarkdownRenderer'
 
 export default MarkdownRenderer

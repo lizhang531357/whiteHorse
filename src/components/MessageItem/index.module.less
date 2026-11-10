@@ -200,18 +200,32 @@
     padding: 4px 0;
 
     .reasoningToggle {
-      height: auto;
-      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
       color: @text-soft;
       font-size: 13px;
+      background: @chip-bg;
+      border: 1px solid @chip-border;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
 
       &:hover {
-        color: @text;
+        color: @accent;
+        background: @hover;
+        border-color: @accent;
+      }
+
+      .reasoningCaret {
+        font-size: 10px;
+        transition: transform 0.15s;
       }
     }
 
     .reasoningBody {
-      margin-top: 6px;
+      margin-top: 8px;
       padding: 10px 12px;
       color: @text-soft;
       font-size: 13px;
